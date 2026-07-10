@@ -196,34 +196,62 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(menu, parse_mode=ParseMode.MARKDOWN)
 
 
+def build_delete_message_ids(
+    reply_message_id: int | None,
+    recent_ids: list[int],
+    requested_count: int,
+) -> list[int]:
+    count = max(1, min(100, requested_count))
+    ids: list[int] = []
+
+    if reply_message_id is not None:
+        ids.append(reply_message_id)
+
+    for recent_id in recent_ids:
+        if recent_id in ids:
+            continue
+        ids.append(recent_id)
+        if len(ids) >= count:
+            break
+
+    return ids[:count]
+
+
 async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         if not await admin_only(update, context):
             return
 
         chat_id = update.effective_chat.id
-        text = update.message.text.strip()
-        ids = []
-
-        if update.message.reply_to_message:
-            ids.append(update.message.reply_to_message.message_id)
+        text = (update.message.text or "").strip()
+        reply_message_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
 
         parts = text.split()
+        requested_count = 1
         if len(parts) > 1 and parts[1].isdigit():
-            count = int(parts[1])
-            extra = count - len(ids)
-            if extra > 0:
-                async with async_session_factory() as session:
-                    msg_repo = MessageLogRepository(session)
-                    recent = await msg_repo.get_recent_message_ids(chat_id, extra)
-                    ids.extend(recent)
-            ids = ids[:count]
+            requested_count = int(parts[1])
 
+        if requested_count < 1:
+            await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
+            return
+
+        ids: list[int] = []
+        if reply_message_id is not None:
+            ids.append(reply_message_id)
+
+        if len(ids) < requested_count or reply_message_id is None:
+            async with async_session_factory() as session:
+                msg_repo = MessageLogRepository(session)
+                recent = await msg_repo.get_recent_message_ids(chat_id, max(1, requested_count))
+
+            recent = [msg_id for msg_id in recent if msg_id != update.message.message_id]
+            ids = build_delete_message_ids(reply_message_id, recent, requested_count)
+
+        ids = list(dict.fromkeys(ids))
         if not ids:
             await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
             return
 
-        ids = list(dict.fromkeys(ids))
         try:
             await context.bot.delete_messages(chat_id, ids[:100])
             await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل.")
