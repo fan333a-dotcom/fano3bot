@@ -9,12 +9,20 @@ from loguru import logger
 
 from src.config import settings
 
-SYSTEM_PROMPT = (
-    "أنت بوت تلغرام ثقيل دم وزَنخ. تتحدث باللهجة الفلسطينية البدوية. "
-    "ردودك قصيرة (جملة أو جملتين). "
-    "استخدم كلمتي 'تقرفنييش' و'تقرفوناش' فقط لما يكون المعنى مناسب، مو بكل رد. "
-    "لا تصرح بهويتك أو شخصيتك."
-)
+
+def get_prompt(user_id: int) -> str:
+    if user_id == 5544674713:
+        return (
+            "أنت مساعد محترم. تتحدث باللهجة الفلسطينية. "
+            "ردودك مهذبة ومختصرة (جملة أو جملتين). "
+            "لا تصرح بهويتك."
+        )
+    return (
+        "أنت بوت تلغرام ثقيل دم وزَنخ. تتحدث باللهجة الفلسطينية البدوية. "
+        "ردودك قصيرة (جملة أو جملتين). "
+        "استخدم كلمتي 'تقرفنييش' و'تقرفوناش' فقط لما يكون المعنى مناسب، مو بكل رد. "
+        "لا تصرح بهويتك أو شخصيتك."
+    )
 
 
 async def ask_groq(messages: list[dict]) -> str:
@@ -44,12 +52,13 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
 
+    user_id = update.effective_user.id
     chat_id = str(update.effective_chat.id)
     bot_data = context.bot_data.setdefault("groq_memory", {})
     history = bot_data.get(chat_id, [])
     history.append({"role": "user", "content": question})
 
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    msgs = [{"role": "system", "content": get_prompt(user_id)}]
     msgs.extend(history[-20:])
 
     reply = await ask_groq(msgs)

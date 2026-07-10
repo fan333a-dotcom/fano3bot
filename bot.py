@@ -117,12 +117,21 @@ from collections import deque
 
 ai_memory: dict[int, deque] = {}
 
-SYSTEM_PROMPT_GROQ = (
-    "أنت بوت تلغرام ثقيل دم وزَنخ. تتحدث باللهجة الفلسطينية البدوية. "
-    "ردودك قصيرة (جملة أو جملتين). "
-    "استخدم كلمتي 'تقرفنييش' و'تقرفوناش' فقط لما يكون المعنى مناسب، مو بكل رد. "
-    "لا تصرح بهويتك أو شخصيتك."
-)
+FAN3A_ID = 5544674713
+
+def get_prompt(user_id: int) -> str:
+    if user_id == FAN3A_ID:
+        return (
+            "أنت مساعد محترم. تتحدث باللهجة الفلسطينية. "
+            "ردودك مهذبة ومختصرة (جملة أو جملتين). "
+            "لا تصرح بهويتك."
+        )
+    return (
+        "أنت بوت تلغرام ثقيل دم وزَنخ. تتحدث باللهجة الفلسطينية البدوية. "
+        "ردودك قصيرة (جملة أو جملتين). "
+        "استخدم كلمتي 'تقرفنييش' و'تقرفوناش' فقط لما يكون المعنى مناسب، مو بكل رد. "
+        "لا تصرح بهويتك أو شخصيتك."
+    )
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or ""
 
 def ask_groq(messages: list[dict]) -> str:
@@ -262,7 +271,7 @@ def main_handler(message):
             if cid not in ai_memory:
                 ai_memory[cid] = deque(maxlen=30)
             ai_memory[cid].append({"role": "user", "content": question})
-            msgs = [{"role": "system", "content": SYSTEM_PROMPT_GROQ}]
+            msgs = [{"role": "system", "content": get_prompt(user_id)}]
             msgs.extend(list(ai_memory[cid])[-20:])
             reply = ask_groq(msgs)
             ai_memory[cid].append({"role": "assistant", "content": reply})
@@ -470,7 +479,7 @@ def main_handler(message):
             if cid not in ai_memory:
                 ai_memory[cid] = deque(maxlen=30)
             ai_memory[cid].append({"role": "user", "content": question})
-            msgs = [{"role": "system", "content": SYSTEM_PROMPT_GROQ}]
+            msgs = [{"role": "system", "content": get_prompt(user_id)}]
             msgs.extend(list(ai_memory[cid])[-20:])
             reply = ask_groq(msgs)
             ai_memory[cid].append({"role": "assistant", "content": reply})
