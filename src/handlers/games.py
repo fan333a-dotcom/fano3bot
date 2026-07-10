@@ -120,6 +120,7 @@ async def games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "🔹 **حزورة** -> ألغاز وفوازير بتخلي مخك شغال 🧠\n"
         "🔹 **نسبة الحب** -> بتقيس المحبة والانسجام بالجروب 🥰\n"
         "🔹 **معلوماتي** -> كشف حساب لنقاطك ورتبتك الحالية 📊\n"
+        "🔹 **التفاعل** -> ترتيب أكثر 5 أشخاص تفاعلاً في الجروب 🏆\n"
         "🔹 **كِشري** -> لعبة الحظ المثيرة 🎲\n\n"
         "💡 **شات الذكاء الاصطناعي المطور:**\n"
         "نادني بكلمة (يا فنوع) واكتب سؤالك بعدها مباشرة، وبسولف معك كأني خويك بالجروب! 🧠🤖"
@@ -236,6 +237,35 @@ async def معلوماتي(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(status_text, parse_mode="Markdown")
 
 
+async def top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+
+    async with async_session_factory() as session:
+        member_repo = ChatMemberRepository(session)
+        top_members = await member_repo.get_leaderboard(chat_id, sort_by="points", limit=5)
+
+        if not top_members:
+            await update.message.reply_text("📊 لا يوجد إحصائيات تفاعل بعد، ابدأ بالكتابة واجمع نقاط!")
+            return
+
+        lines = []
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+        for i, m in enumerate(top_members):
+            try:
+                chat_member = await update.effective_chat.get_member(m.user_id)
+                name = chat_member.user.first_name or f"({m.user_id})"
+            except:
+                name = f"({m.user_id})"
+            lines.append(f"{medals[i]} **{name}** — {m.points} نقطة 🪙")
+
+        msg = (
+            "📊 **ترتيب المتفاعلين في الجروب:**\n\n"
+            + "\n".join(lines)
+            + "\n\n⚡ تفاعل واجمع نقاط عشان تتصدر!"
+        )
+        await update.message.reply_text(msg, parse_mode="Markdown")
+
+
 async def كِشري(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     bet = 10
     user_id = update.effective_user.id
@@ -302,6 +332,10 @@ def get_game_handlers() -> list:
         "نسبة": نسبة_الحب,
         "معلوماتي": معلوماتي,
         "معلومات": معلوماتي,
+        "التفاعل": top,
+        "المتفاعلين": top,
+        "top": top,
+        "leaderboard": top,
         "الألعاب": games_menu,
         "الاوامر": games_menu,
         "الالعاب": games_menu,
