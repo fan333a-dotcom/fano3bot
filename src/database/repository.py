@@ -295,6 +295,16 @@ class MessageLogRepository:
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 
+    async def get_recent_message_ids(self, chat_id: int, limit: int = 10) -> list[int]:
+        stmt = (
+            select(MessageLog.message_id)
+            .where(MessageLog.chat_id == chat_id)
+            .order_by(MessageLog.id.desc())
+            .limit(min(limit, 100))
+        )
+        result = await self.session.execute(stmt)
+        return [row[0] for row in result.all()]
+
 
 class FilterRepository:
     def __init__(self, session: AsyncSession):
