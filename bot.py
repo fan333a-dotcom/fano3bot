@@ -141,6 +141,9 @@ def build_application() -> Application:
     async def message_logger(update, context):
         await handle_message(update, context)
         if update.message and update.effective_chat:
+            text = (update.message.text or "").strip()
+            if text.startswith("مسح"):
+                return
             from collections import deque
             q = context.bot_data.setdefault("msg_q", {}).setdefault(
                 update.effective_chat.id, deque(maxlen=300)
