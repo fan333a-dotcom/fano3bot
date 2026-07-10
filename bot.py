@@ -97,6 +97,7 @@ async def handle_message(update, context):
             )
         except Exception as e:
             logger.debug(f"Failed to log message: {e}")
+            await session.rollback()
 
         if text and not text.startswith("/"):
             member = await member_repo.add_points(user.id, chat.id)

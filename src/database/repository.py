@@ -255,17 +255,20 @@ class MessageLogRepository:
         has_link: bool = False,
         has_media: bool = False,
     ):
-        log = MessageLog(
-            chat_id=chat_id,
-            user_id=user_id,
-            message_id=message_id,
-            content_type=content_type,
-            content_length=content_length,
-            has_link=has_link,
-            has_media=has_media,
-        )
-        self.session.add(log)
-        await self.session.commit()
+        try:
+            log = MessageLog(
+                chat_id=chat_id,
+                user_id=user_id,
+                message_id=message_id,
+                content_type=content_type,
+                content_length=content_length,
+                has_link=has_link,
+                has_media=has_media,
+            )
+            self.session.add(log)
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
 
     async def count_today(self, chat_id: int, user_id: int) -> int:
         today = datetime.utcnow().strftime("%Y-%m-%d")
