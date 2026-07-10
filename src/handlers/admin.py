@@ -212,17 +212,15 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         reply_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
         count = max(1, min(100, int(text.removeprefix("مسح").strip() or 1)))
 
-        ids: set[int] = set()
+        ids: set[int] = {cmd_id}
         if reply_id is not None:
             ids.add(reply_id)
-            start = max(2, reply_id - count + 1)
-            ids.update(range(start, reply_id + 1))
-        else:
-            start = max(2, cmd_id - count)
-            ids.update(range(start, cmd_id + count + 1))
 
-        if not ids:
-            return
+        async with async_session_factory() as session:
+            msg_repo = MessageLogRepository(session)
+            recent = await msg_repo.get_recent_message_ids(chat_id, count)
+            for mid in recent:
+                ids.add(mid)
 
         id_list = sorted(ids)[:100]
         logger.info(f"مسح: chat={chat_id} cmd={cmd_id} count={count} ids={id_list}")
