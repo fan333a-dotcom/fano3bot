@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import re
 
 from telegram import Update, ChatPermissions, ChatMember as TGChatMember
@@ -203,12 +202,8 @@ def parse_delete_count(text: str) -> int:
     match = re.fullmatch(r"مسح(?:\s*(\d+))?", text.strip())
     if not match:
         return 1
-
     value = match.group(1)
-    if not value:
-        return 1
-
-    return max(1, min(100, int(value)))
+    return max(1, min(100, int(value))) if value else 1
 
 
 def build_delete_message_ids(
@@ -218,44 +213,15 @@ def build_delete_message_ids(
 ) -> list[int]:
     count = max(1, min(100, requested_count))
     ids: list[int] = []
-
     if reply_message_id is not None:
         ids.append(reply_message_id)
-
     for recent_id in recent_ids:
         if recent_id in ids:
             continue
         ids.append(recent_id)
         if len(ids) >= count:
             break
-
     return ids[:count]
-
-
-async def get_recent_message_ids_from_chat(bot, chat_id: int, limit: int) -> list[int]:
-    try:
-        history = bot.get_chat_history(chat_id=chat_id, limit=max(10, limit))
-        if inspect.isawaitable(history):
-            history = await history
-
-        if hasattr(history, "__aiter__"):
-            recent_ids: list[int] = []
-            async for message in history:
-                message_id = getattr(message, "message_id", None)
-                if message_id is not None:
-                    recent_ids.append(message_id)
-            return recent_ids
-
-        if isinstance(history, (list, tuple)):
-            return [
-                getattr(message, "message_id", None)
-                for message in history
-                if getattr(message, "message_id", None) is not None
-            ]
-    except Exception as exc:
-        logger.debug(f"Failed to fetch chat history for delete: {exc}")
-
-    return []
 
 
 async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -268,38 +234,27 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         chat_id = update.effective_chat.id
-        reply_message_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
-
-        requested_count = parse_delete_count(text)
-        if requested_count < 1:
-            await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
-            return
+        reply_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
+        count = parse_delete_count(text)
 
         ids: list[int] = []
-        if reply_message_id is not None:
-            ids.append(reply_message_id)
+        if reply_id is not None:
+            ids.append(reply_id)
 
-        if len(ids) < requested_count or reply_message_id is None:
-            recent_from_history: list[int] = []
-            if hasattr(context.bot, "get_chat_history"):
-                recent_from_history = await get_recent_message_ids_from_chat(
-                    context.bot,
-                    chat_id,
-                    max(10, requested_count),
-                )
+        missing = count - len(ids)
+        if missing > 0:
+            recent_ids: list[int] = []
+            recent_from_memory = context.bot_data.get("recent_msgs", {}).get(chat_id, [])
+            if len(recent_from_memory) >= missing:
+                recent_ids = [m for m in reversed(recent_from_memory) if m != update.message.message_id and m not in ids]
 
-            if not recent_from_history:
+            if len(recent_ids) < missing:
                 async with async_session_factory() as session:
                     msg_repo = MessageLogRepository(session)
-                    recent_from_history = await msg_repo.get_recent_message_ids(
-                        chat_id,
-                        max(1, requested_count),
-                    )
+                    recent_ids = await msg_repo.get_recent_message_ids(chat_id, missing)
 
-            recent_from_history = [
-                msg_id for msg_id in recent_from_history if msg_id != update.message.message_id
-            ]
-            ids = build_delete_message_ids(reply_message_id, recent_from_history, requested_count)
+            recent_ids = [m for m in recent_ids if m != update.message.message_id and m not in ids]
+            ids = build_delete_message_ids(reply_id, recent_ids, count)
 
         ids = list(dict.fromkeys(ids))
         if not ids:
@@ -310,16 +265,21 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await context.bot.delete_messages(chat_id, ids[:100])
             await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل.")
         except Exception:
+            deleted = 0
             for mid in ids[:100]:
                 try:
                     await context.bot.delete_message(chat_id, mid)
+                    deleted += 1
                 except:
                     pass
-            await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل (واحد واحد).")
+            if deleted:
+                await update.message.reply_text(f"✅ تم مسح {deleted} رسالة/رسائل (واحد واحد).")
+            else:
+                await update.message.reply_text("⚠️ ما قدرت أمسح أي رسالة. تأكد إني مشرف وعندي صلاحية حذف.")
     except Exception as e:
         logger.error(f"Error in delete_messages: {e}")
         try:
-            await update.message.reply_text("⚠️ ما قدرت أمسح، تأكد إني مشرف وعندي صلاحيات.")
+            await update.message.reply_text("⚠️ ما قدرت أمسح، تأكد إني مشرف وعندي صلاحية حذف.")
         except:
             pass
 

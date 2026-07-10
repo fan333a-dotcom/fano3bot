@@ -140,6 +140,13 @@ def build_application() -> Application:
 
     async def message_logger(update, context):
         await handle_message(update, context)
+        if update.message and update.effective_chat:
+            recent = context.bot_data.setdefault("recent_msgs", {}).setdefault(
+                update.effective_chat.id, []
+            )
+            recent.append(update.message.message_id)
+            if len(recent) > 200:
+                recent[:] = recent[-100:]
 
     application.add_handler(
         MessageHandler(filters.ALL & ~filters.COMMAND, message_logger, block=False),

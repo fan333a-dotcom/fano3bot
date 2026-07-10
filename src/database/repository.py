@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional
 
+from loguru import logger
 from sqlalchemy import func, select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -267,7 +268,8 @@ class MessageLogRepository:
             )
             self.session.add(log)
             await self.session.commit()
-        except Exception:
+        except Exception as exc:
+            logger.warning(f"Failed to log message (chat={chat_id}, msg_id={message_id}): {exc}")
             await self.session.rollback()
 
     async def count_today(self, chat_id: int, user_id: int) -> int:
