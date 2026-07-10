@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from telegram import Update, ChatPermissions, ChatMember as TGChatMember
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, MessageHandler, filters
@@ -196,6 +198,18 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(menu, parse_mode=ParseMode.MARKDOWN)
 
 
+def parse_delete_count(text: str) -> int:
+    match = re.fullmatch(r"مسح(?:\s*(\d+))?", text.strip())
+    if not match:
+        return 1
+
+    value = match.group(1)
+    if not value:
+        return 1
+
+    return max(1, min(100, int(value)))
+
+
 def build_delete_message_ids(
     reply_message_id: int | None,
     recent_ids: list[int],
@@ -226,11 +240,7 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         text = (update.message.text or "").strip()
         reply_message_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
 
-        parts = text.split()
-        requested_count = 1
-        if len(parts) > 1 and parts[1].isdigit():
-            requested_count = int(parts[1])
-
+        requested_count = parse_delete_count(text)
         if requested_count < 1:
             await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
             return
@@ -240,12 +250,24 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             ids.append(reply_message_id)
 
         if len(ids) < requested_count or reply_message_id is None:
+            recent: list[int] = []
             async with async_session_factory() as session:
                 msg_repo = MessageLogRepository(session)
                 recent = await msg_repo.get_recent_message_ids(chat_id, max(1, requested_count))
 
-            recent = [msg_id for msg_id in recent if msg_id != update.message.message_id]
             ids = build_delete_message_ids(reply_message_id, recent, requested_count)
+
+            if not ids and hasattr(context.bot, "get_chat_history"):
+                try:
+                    history = context.bot.get_chat_history(chat_id=chat_id, limit=max(10, requested_count))
+                    recent_from_history: list[int] = []
+                    async for msg in history:
+                        if msg.message_id not in recent_from_history:
+                            recent_from_history.append(msg.message_id)
+
+                    ids = build_delete_message_ids(reply_message_id, recent_from_history, requested_count)
+                except Exception as exc:
+                    logger.debug(f"Failed to fetch chat history for delete: {exc}")
 
         ids = list(dict.fromkeys(ids))
         if not ids:
@@ -277,6 +299,6 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^(طرد|كيك)"), kick),
         MessageHandler(filters.Regex(r"^اسكت"), mute),
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
-        MessageHandler(filters.Regex(r"^مسح"), delete_messages),
+        MessageHandler(filters.Regex(r"^مسح(?:\s*\d+)?$"), delete_messages),
         MessageHandler(filters.Text(["مسح"]), delete_messages),
     ]
