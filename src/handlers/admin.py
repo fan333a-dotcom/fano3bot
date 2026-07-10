@@ -212,7 +212,7 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         reply_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
         count = max(1, min(100, int(text.removeprefix("مسح").strip() or 1)))
 
-        ids: set[int] = set()
+        ids: set[int] = {cmd_id}
         if reply_id is not None:
             ids.add(reply_id)
 
@@ -223,8 +223,9 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 start = max(2, oldest - count)
                 ids.update(range(start, oldest))
             else:
-                start = max(2, cmd_id - count + 1)
-                ids.update(range(start, cmd_id + 1))
+                start = max(2, cmd_id - count)
+                ids.update(range(start, cmd_id))
+            ids.update(range(cmd_id + 1, cmd_id + count + 1))
             if reply_id is None:
                 track["oldest"] = min(ids)
 
