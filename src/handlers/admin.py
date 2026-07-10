@@ -198,32 +198,6 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(menu, parse_mode=ParseMode.MARKDOWN)
 
 
-def parse_delete_count(text: str) -> int:
-    match = re.fullmatch(r"مسح(?:\s*(\d+))?", text.strip())
-    if not match:
-        return 1
-    value = match.group(1)
-    return max(1, min(100, int(value))) if value else 1
-
-
-def build_delete_message_ids(
-    reply_message_id: int | None,
-    recent_ids: list[int],
-    requested_count: int,
-) -> list[int]:
-    count = max(1, min(100, requested_count))
-    ids: list[int] = []
-    if reply_message_id is not None:
-        ids.append(reply_message_id)
-    for recent_id in recent_ids:
-        if recent_id in ids:
-            continue
-        ids.append(recent_id)
-        if len(ids) >= count:
-            break
-    return ids[:count]
-
-
 async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         text = (update.message.text or "").strip()
@@ -234,54 +208,33 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             return
 
         chat_id = update.effective_chat.id
+        cmd_id = update.message.message_id
         reply_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
-        count = parse_delete_count(text)
+        count = max(1, min(100, int(text.removeprefix("مسح").strip() or 1)))
 
-        ids: list[int] = []
+        ids: set[int] = set()
         if reply_id is not None:
-            ids.append(reply_id)
+            ids.add(reply_id)
 
-        missing = count - len(ids)
-        if missing > 0:
-            recent_ids: list[int] = []
-            recent_from_memory = context.bot_data.get("recent_msgs", {}).get(chat_id, [])
-            if len(recent_from_memory) >= missing:
-                recent_ids = [m for m in reversed(recent_from_memory) if m != update.message.message_id and m not in ids]
+        if count > len(ids):
+            start = max(2, cmd_id - count)
+            ids.update(range(start, cmd_id))
 
-            if len(recent_ids) < missing:
-                async with async_session_factory() as session:
-                    msg_repo = MessageLogRepository(session)
-                    recent_ids = await msg_repo.get_recent_message_ids(chat_id, missing)
+        ids.discard(cmd_id)
 
-            recent_ids = [m for m in recent_ids if m != update.message.message_id and m not in ids]
-            ids = build_delete_message_ids(reply_id, recent_ids, count)
-
-        ids = list(dict.fromkeys(ids))
         if not ids:
-            await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
             return
 
         try:
-            await context.bot.delete_messages(chat_id, ids[:100])
-            await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل.")
+            await context.bot.delete_messages(chat_id, list(ids)[:100])
         except Exception:
-            deleted = 0
-            for mid in ids[:100]:
+            for mid in list(ids)[:100]:
                 try:
                     await context.bot.delete_message(chat_id, mid)
-                    deleted += 1
                 except:
                     pass
-            if deleted:
-                await update.message.reply_text(f"✅ تم مسح {deleted} رسالة/رسائل (واحد واحد).")
-            else:
-                await update.message.reply_text("⚠️ ما قدرت أمسح أي رسالة. تأكد إني مشرف وعندي صلاحية حذف.")
     except Exception as e:
         logger.error(f"Error in delete_messages: {e}")
-        try:
-            await update.message.reply_text("⚠️ ما قدرت أمسح، تأكد إني مشرف وعندي صلاحية حذف.")
-        except:
-            pass
 
 
 def get_admin_handlers() -> list:
