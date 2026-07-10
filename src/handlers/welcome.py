@@ -4,6 +4,19 @@ import random
 
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes, MessageHandler, filters
+from loguru import logger
+
+from src.database.engine import async_session_factory
+from src.database.repository import ChatMemberRepository
+
+
+async def _add_member(user_id: int, chat_id: int):
+    try:
+        async with async_session_factory() as session:
+            repo = ChatMemberRepository(session)
+            await repo.get_or_create(user_id, chat_id)
+    except Exception as exc:
+        logger.warning(f"Failed to add member {user_id} to chat_members: {exc}")
 
 
 async def on_bot_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -38,6 +51,7 @@ async def on_bot_join(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 )
                 return
         else:
+            await _add_member(new_user.id, update.effective_chat.id)
             await _welcome_user(update, context, new_user)
 
 
