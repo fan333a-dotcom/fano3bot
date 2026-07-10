@@ -253,10 +253,10 @@ def main_handler(message):
     user_points[user_id] += 1 
 
     # ---- رد على رسالة البوت عبر AI ----
-    if message.reply_to_message and text == "بحبك":
+    if message.reply_to_message and text:
         replied = message.reply_to_message
         if replied.from_user and replied.from_user.id == bot.get_me().id:
-            question = "فنوع بحبك"
+            question = text
             bot.send_chat_action(message.chat.id, 'typing')
             cid = message.chat.id
             if cid not in ai_memory:
