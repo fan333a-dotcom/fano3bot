@@ -252,6 +252,23 @@ def main_handler(message):
         user_points[user_id] = 0
     user_points[user_id] += 1 
 
+    # ---- رد على رسالة البوت عبر AI ----
+    if text == "رددي عليه" and message.reply_to_message:
+        replied = message.reply_to_message
+        if replied.from_user and replied.from_user.id == bot.get_me().id:
+            bot.send_chat_action(message.chat.id, 'typing')
+            cid = message.chat.id
+            if cid not in ai_memory:
+                ai_memory[cid] = deque(maxlen=30)
+            q = f"رد على هذه الرسالة: {replied.text}"
+            ai_memory[cid].append({"role": "user", "content": q})
+            msgs = [{"role": "system", "content": SYSTEM_PROMPT_GROQ}]
+            msgs.extend(list(ai_memory[cid])[-20:])
+            reply = ask_groq(msgs)
+            ai_memory[cid].append({"role": "assistant", "content": reply})
+            bot.reply_to(message, reply)
+            return
+
     # ================= قـائـمـة الأوامـر والـألـعـاب العـربـيـة =================
 
     if text == "الألعاب" or text == "الاوامر" or text == "الالعاب" or text == "قائمة الألعاب":
