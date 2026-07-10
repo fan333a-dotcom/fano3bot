@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -8,6 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from telegram.ext import Application, ApplicationBuilder, MessageHandler, filters
 from loguru import logger
+from fastapi import FastAPI  # استيراد FastAPI المدمج لديك
+import uvicorn
 
 from src.config import settings
 from src.utils.logger import setup_logger
@@ -17,6 +20,7 @@ from src.handlers.admin import get_admin_handlers
 from src.handlers.misc import get_misc_handlers
 from src.handlers.ai import get_ai_handlers
 from src.handlers.welcome import get_welcome_handlers
+from src.handlers.azkar import get_azkar_handlers
 # from src.handlers.youtube import get_youtube_handlers
 from src.protection.anti_spam import protection_service
 from src.analytics.tracker import analytics_tracker
@@ -24,10 +28,17 @@ from src.scheduler.tasks import scheduler_service
 from src.database.repository import ChatMemberRepository, MessageLogRepository
 
 
+# --- إعداد تطبيق FastAPI من أجل Render ---
+web_app = FastAPI()
+
+@web_app.get("/")
+async def home():
+    return {"status": "Fanou3 Bot is alive and running via FastAPI!"}
+# ------------------------------------------
+
 async def protection_middleware(update, context):
     if not update.message or not update.message.text:
         return True
-
     result = await protection_service.check_message(update, context)
     if not result:
         if update.message:
@@ -39,48 +50,7 @@ async def protection_middleware(update, context):
     return True
 
 
-async def track_message(update, context):
-    if not update.message or not update.effective_user:
-        return
-
-    text = update.message.text or ""
-    content_type = "text"
-    if update.message.photo:
-        content_type = "photo"
-    elif update.message.video:
-        content_type = "video"
-    elif update.message.animation:
-        content_type = "animation"
-    elif update.message.document:
-        content_type = "document"
-    elif update.message.sticker:
-        content_type = "sticker"
-
-    analytics_tracker.track_message(
-        update.effective_chat.id,
-        update.effective_user.id,
-        text,
-        content_type,
-    )
-
-    session = context.bot_data.get("session")
-    if session:
-        try:
-            msg_repo = MessageLogRepository(session)
-            await msg_repo.log(
-                chat_id=update.effective_chat.id,
-                user_id=update.effective_user.id,
-                message_id=update.message.message_id,
-                content_type=content_type,
-                content_length=len(text),
-                has_link="http" in text.lower() or "t.me/" in text.lower(),
-                has_media=content_type != "text",
-            )
-        except Exception as e:
-            logger.debug(f"Failed to log message: {e}")
-
-
-async def main_handler(update, context):
+async def handle_message(update, context):
     if not update.message or not update.effective_user:
         return
 
@@ -88,34 +58,57 @@ async def main_handler(update, context):
     chat = update.effective_chat
     text = update.message.text.strip() if update.message.text else ""
 
-    if text in ("تم", "تمم", "tmm"):
-        await update.message.reply_text(
-            f"💪 تسلم يا {user.first_name}! بداية قوية، استمر بالتفاعل وجمع النقاط! 🔥"
-        )
-        return
+    from src.database.engine import async_session_factory
+    from src.database.repository import UserRepository, ChatRepository
 
-    await track_message(update, context)
+    async with async_session_factory() as session:
+        user_repo = UserRepository(session)
+        chat_repo = ChatRepository(session)
+        member_repo = ChatMemberRepository(session)
+        msg_repo = MessageLogRepository(session)
 
-    if text and not text.startswith("/"):
-        member_repo = context.user_data.get("member_repo")
-        if member_repo:
+        await user_repo.get_or_create(user.id, user.first_name, user.last_name, user.username)
+        await chat_repo.get_or_create(chat.id, chat.title, chat.type)
+
+        if text in ("تم", "تمم", "tmm"):
+            await update.message.reply_text(f"💪 تسلم يا {user.first_name}! بداية قوية، استمر بالتفاعل واجمع النقاط! 🔥")
+            return
+
+        content_type = "text"
+        if update.message.photo:
+            content_type = "photo"
+        elif update.message.video:
+            content_type = "video"
+        elif update.message.animation:
+            content_type = "animation"
+        elif update.message.document:
+            content_type = "document"
+        elif update.message.sticker:
+            content_type = "sticker"
+
+        analytics_tracker.track_message(chat.id, user.id, text, content_type)
+
+        try:
+            await msg_repo.log(
+                chat_id=chat.id, user_id=user.id, message_id=update.message.message_id,
+                content_type=content_type, content_length=len(text),
+                has_link="http" in text.lower() or "t.me/" in text.lower(),
+                has_media=content_type != "text",
+            )
+        except Exception as e:
+            logger.debug(f"Failed to log message: {e}")
+
+        if text and not text.startswith("/"):
             member = await member_repo.add_points(user.id, chat.id)
-
             milestones = {15: "🌟", 50: "🎤", 150: "🔥", 300: "👑", 500: "💎", 1000: "🏆"}
             rank_names = {
-                15: "بطل الجروب الناشئ",
-                50: "سفير المرح",
-                150: "نجم الدردشة الأول",
-                300: "وزير السوالف",
-                500: "أسطورة الجروب",
-                1000: "ملك التحدي 👑",
+                15: "بطل الجروب الناشئ", 50: "سفير المرح", 150: "نجم الدردشة الأول",
+                300: "وزير السوالف", 500: "أسطورة الجروب", 1000: "ملك التحدي 👑",
             }
-
             if member.points in milestones:
                 await update.message.reply_text(
                     f"🎊🎊🎊 **مبروووك {user.first_name} !!!** 🎊🎊🎊\n"
-                    f"تخطيت حاجز **{member.points} نقطة** "
-                    f"وصار لقبك: **{rank_names.get(member.points, 'عملاق التفاعل 💪')}**\n"
+                    f"تخطيت حاجز **{member.points} نقطة** وصار لقبك: **{rank_names.get(member.points, 'عملاق التفاعل 💪')}**\n"
                     f"الجروب كله يفتخر فيك والله! استمر يابطل 🔥🔥🔥",
                     parse_mode="Markdown",
                 )
@@ -137,37 +130,6 @@ async def post_stop(application: Application):
     logger.info("Fanou3 Bot stopped")
 
 
-async def db_session_middleware(update, context):
-    from src.database.engine import async_session_factory
-    from src.database.repository import UserRepository, ChatRepository
-
-    async with async_session_factory() as session:
-        context.bot_data["session"] = session
-        context.user_data["user_repo"] = UserRepository(session)
-        context.user_data["chat_repo"] = ChatRepository(session)
-        context.user_data["member_repo"] = ChatMemberRepository(session)
-        context.user_data["msg_log_repo"] = MessageLogRepository(session)
-
-        if update.effective_user:
-            user_repo = context.user_data["user_repo"]
-            await user_repo.get_or_create(
-                update.effective_user.id,
-                update.effective_user.first_name,
-                update.effective_user.last_name,
-                update.effective_user.username,
-            )
-
-        if update.effective_chat:
-            chat_repo = context.user_data["chat_repo"]
-            await chat_repo.get_or_create(
-                update.effective_chat.id,
-                update.effective_chat.title,
-                update.effective_chat.type,
-            )
-
-        await main_handler(update, context)
-
-
 def build_application() -> Application:
     application = (
         ApplicationBuilder()
@@ -185,15 +147,16 @@ def build_application() -> Application:
     handlers.extend(get_game_handlers())
     handlers.extend(get_ai_handlers())
     # handlers.extend(get_youtube_handlers())
+    handlers.extend(get_azkar_handlers())
     handlers.extend(get_misc_handlers())
 
     for handler in handlers:
         application.add_handler(handler)
 
-    async def catch_all(update, context):
-        pass
+    async def message_logger(update, context):
+        await handle_message(update, context)
 
-    application.add_handler(MessageHandler(filters.ALL, catch_all), group=-1)
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, message_logger), group=-1)
 
     return application
 
@@ -201,7 +164,7 @@ def build_application() -> Application:
 async def main():
     setup_logger()
     logger.info("🚀 Starting Fanou3 Bot...")
-
+    
     application = build_application()
 
     await application.initialize()
@@ -210,11 +173,16 @@ async def main():
         allowed_updates=["message", "chat_member", "my_chat_member"],
     )
 
-    logger.info("Bot is running. Press Ctrl+C to stop.")
+    logger.info("Bot is running. Setting up FastAPI web server...")
 
+    # تشغيل سيرفر Uvicorn بداخل نفس الـ Event Loop الخاص بـ Asyncio
+    # هذا يضمن تشغيل السيرفر وتجاوز فحص Render بنجاح دون التأثير على البوت
+    port = int(os.environ.get("PORT", 8080))
+    config = uvicorn.Config(app=web_app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(config)
+    
     try:
-        while True:
-            await asyncio.sleep(3600)
+        await server.serve()
     except asyncio.CancelledError:
         pass
     finally:

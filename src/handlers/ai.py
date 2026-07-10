@@ -13,7 +13,7 @@ async def ask_ai(question_text: str) -> str:
     try:
         prompt = (
             f"أنت بوت تلغرام اسمك 'فنوع'. أنت فرفوش، محبوب، ومضحك "
-            f"وتتحدث بالعامية العربية الطريفة جداً. رد باختصار وبطرافة على هذا السؤال: {question_text}"
+            f"وتتحدث باللهجة الفلسطينية العامية الطريفة جداً. رد باختصار وبطرافة على هذا السؤال: {question_text}"
         )
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(f"{settings.ai_api_url}/{prompt}")
@@ -21,7 +21,7 @@ async def ask_ai(question_text: str) -> str:
                 return response.text
             return "والله يا صاحبي مخي معلق هالدقيقة، اسألني بعد شوي! 🧠🤖"
     except:
-        return "سيرفرات الذكاء الاصطناعي نايمة حالياً، خلنا نلعب أفضل! 😴"
+        return "سيرفرات الذكاء الاصطناعي نايمة حالياً، خلنا نلعب أحسن! 😴"
 
 
 async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -24,7 +24,7 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
 
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if not await is_admin(update, context):
-        await update.message.reply_text("⚠️ هذه الأوامر خاصة بالمشرفين فقط.")
+        await update.message.reply_text("⚠️ هاد الأوامر خاصة بالمشرفين بس.")
         return False
     return True
 
@@ -56,7 +56,7 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await get_target_user(update)
     if not target:
-        await update.message.reply_text("❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر حظر.")
+        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر حظر.")
         return
 
     target_id, target_name = target
@@ -75,7 +75,7 @@ async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 infraction_type=InfractionType.BAN,
             )
     except Exception as e:
-        await update.message.reply_text("⚠️ ما قدرت أحظر العضو، تأكد أني مشرف وعندي صلاحيات.")
+        await update.message.reply_text("⚠️ ما قدرت أحظر العضو، تأكد إني مشرف وعندي صلاحيات.")
 
 
 async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -83,7 +83,7 @@ async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await get_target_user(update)
     if not target:
-        await update.message.reply_text("❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر كيك.")
+        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر كيك.")
         return
 
     target_id, target_name = target
@@ -103,7 +103,7 @@ async def kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 infraction_type=InfractionType.KICK,
             )
     except:
-        await update.message.reply_text("⚠️ ما قدرت أطرد العضو، تأكد أني مشرف وعندي صلاحيات.")
+        await update.message.reply_text("⚠️ ما قدرت أطرد العضو، تأكد إني مشرف وعندي صلاحيات.")
 
 
 async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -111,7 +111,7 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await get_target_user(update)
     if not target:
-        await update.message.reply_text("❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر اسكت.")
+        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر اسكت.")
         return
 
     target_id, target_name = target
@@ -122,7 +122,7 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         bot_member = await chat.get_member(bot.id)
         bot_self = await bot.get_me()
         if target_id == bot_self.id:
-            await update.message.reply_text("❌ ما أقدر أسوي كذا على نفسي!")
+            await update.message.reply_text("❌ ما أقدر أسوي هيك على نفسي!")
             return
 
         permissions = ChatPermissions(can_send_messages=False)
@@ -138,7 +138,7 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 infraction_type=InfractionType.MUTE, duration=3600,
             )
     except:
-        await update.message.reply_text("⚠️ ما قدرت أكتم العضو، تأكد أني مشرف وعندي صلاحيات.")
+        await update.message.reply_text("⚠️ ما قدرت أكتم العضو، تأكد إني مشرف وعندي صلاحيات.")
 
 
 async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -146,7 +146,7 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await get_target_user(update)
     if not target:
-        await update.message.reply_text("❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر فك اسكت.")
+        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر فك اسكت.")
         return
 
     target_id, target_name = target
@@ -155,7 +155,7 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         bot_self = await context.bot.get_me()
         if target_id == bot_self.id:
-            await update.message.reply_text("❌ ما أقدر أسوي كذا على نفسي!")
+            await update.message.reply_text("❌ ما أقدر أسوي هيك على نفسي!")
             return
 
         permissions = ChatPermissions(
@@ -167,7 +167,7 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await chat.restrict_member(target_id, permissions=permissions)
         await update.message.reply_text(f"✅ تم رفع الكتم عن {target_name}.")
     except:
-        await update.message.reply_text("⚠️ ما قدرت أفك الكتم، تأكد أني مشرف وعندي صلاحيات.")
+        await update.message.reply_text("⚠️ ما قدرت أفك الكتم، تأكد إني مشرف وعندي صلاحيات.")
 
 
 async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -193,7 +193,7 @@ async def رفع_صوتي(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def تنزيل_صوتي(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if await admin_only(update, context):
-        await update.message.reply_text("🤫 تم تفعيل وضع الهدوء، البوت سيصبح خفيف وهادي.")
+        await update.message.reply_text("🤫 تم تفعيل وضع الهدوء، البوت رح يصير خفيف وهادي.")
 
 
 def get_admin_handlers() -> list:
