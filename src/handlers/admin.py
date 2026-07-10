@@ -241,12 +241,17 @@ async def get_recent_message_ids_from_chat(bot, chat_id: int, limit: int) -> lis
         if hasattr(history, "__aiter__"):
             recent_ids: list[int] = []
             async for message in history:
-                if getattr(message, "message_id", None) is not None:
-                    recent_ids.append(message.message_id)
+                message_id = getattr(message, "message_id", None)
+                if message_id is not None:
+                    recent_ids.append(message_id)
             return recent_ids
 
         if isinstance(history, (list, tuple)):
-            return [getattr(message, "message_id", None) for message in history if getattr(message, "message_id", None) is not None]
+            return [
+                getattr(message, "message_id", None)
+                for message in history
+                if getattr(message, "message_id", None) is not None
+            ]
     except Exception as exc:
         logger.debug(f"Failed to fetch chat history for delete: {exc}")
 
@@ -275,20 +280,26 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             ids.append(reply_message_id)
 
         if len(ids) < requested_count or reply_message_id is None:
-            recent: list[int] = []
-            async with async_session_factory() as session:
-                msg_repo = MessageLogRepository(session)
-                recent = await msg_repo.get_recent_message_ids(chat_id, max(1, requested_count))
-
-            ids = build_delete_message_ids(reply_message_id, recent, requested_count)
-
-            if not ids and hasattr(context.bot, "get_chat_history"):
+            recent_from_history: list[int] = []
+            if hasattr(context.bot, "get_chat_history"):
                 recent_from_history = await get_recent_message_ids_from_chat(
                     context.bot,
                     chat_id,
                     max(10, requested_count),
                 )
-                ids = build_delete_message_ids(reply_message_id, recent_from_history, requested_count)
+
+            if not recent_from_history:
+                async with async_session_factory() as session:
+                    msg_repo = MessageLogRepository(session)
+                    recent_from_history = await msg_repo.get_recent_message_ids(
+                        chat_id,
+                        max(1, requested_count),
+                    )
+
+            recent_from_history = [
+                msg_id for msg_id in recent_from_history if msg_id != update.message.message_id
+            ]
+            ids = build_delete_message_ids(reply_message_id, recent_from_history, requested_count)
 
         ids = list(dict.fromkeys(ids))
         if not ids:
