@@ -303,7 +303,7 @@ def get_game_handlers() -> list:
 
     return [
         MessageHandler(
-            filters.Text(game_cmd) & ~filters.COMMAND, handler
+            filters.Text([game_cmd]) & ~filters.COMMAND, handler
         )
         for game_cmd, handler in game_commands.items()
     ]

@@ -186,7 +186,7 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 def get_admin_handlers() -> list:
     return [
-        MessageHandler(filters.Text("قائمة الأدمن"), admin_menu),
+        MessageHandler(filters.Text(["قائمة الأدمن"]), admin_menu),
         MessageHandler(filters.Regex(r"^حظر"), ban),
         MessageHandler(filters.Regex(r"^(طرد|كيك)"), kick),
         MessageHandler(filters.Regex(r"^اسكت"), mute),
