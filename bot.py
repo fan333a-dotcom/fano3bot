@@ -112,27 +112,27 @@ bad_words = [
     "امش في جنازة ولا تمش في جوازة 🚶‍♂️"
 ]
 
-# ---- Google Gemini الذكاء الاصطناعي ---- 
-import json
+# ---- Groq (LLaMA) الذكاء الاصطناعي ----
 from collections import deque
 
 ai_memory: dict[int, deque] = {}
 
-SYSTEM_PROMPT_GEMINI = (
+SYSTEM_PROMPT_GROQ = (
     "أنت بوت تلغرام اسمك 'فنوع'. تتحدث باللهجة الفلسطينية العامية. "
     "أنت فرفوش، محبوب، مضحك، وطبطاب. ردودك قصيرة ومختصرة (جملة أو جملتين)"
 )
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or ""
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or ""
 
-def ask_gemini(history: list[dict]) -> str:
-    if not GEMINI_API_KEY:
-        return "ما في مفتاح AI، حط GEMINI_API_KEY في .env 🧠"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+def ask_groq(messages: list[dict]) -> str:
+    if not GROQ_API_KEY:
+        return "ما في مفتاح AI، حط GROQ_API_KEY في .env 🧠"
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
     try:
-        resp = requests.post(url, json={"contents": history}, timeout=20)
+        resp = requests.post(url, json=payload, headers=headers, timeout=20)
         data = resp.json()
-        text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-        return text or "مخي طفى هالدقيقة، اسألني بعد شوي 🧠🤖"
+        return data["choices"][0]["message"]["content"]
     except Exception as e:
         return "سيرفر الذكاء نايم حالياً، خلنا نلعب أحسن 😴"
 
@@ -450,11 +450,11 @@ def main_handler(message):
             cid = message.chat.id
             if cid not in ai_memory:
                 ai_memory[cid] = deque(maxlen=30)
-            ai_memory[cid].append({"role": "user", "parts": [{"text": question}]})
-            full = [{"role": "user", "parts": [{"text": SYSTEM_PROMPT_GEMINI}]}]
-            full.extend(list(ai_memory[cid])[-20:])
-            reply = ask_gemini(full)
-            ai_memory[cid].append({"role": "model", "parts": [{"text": reply}]})
+            ai_memory[cid].append({"role": "user", "content": question})
+            msgs = [{"role": "system", "content": SYSTEM_PROMPT_GROQ}]
+            msgs.extend(list(ai_memory[cid])[-20:])
+            reply = ask_groq(msgs)
+            ai_memory[cid].append({"role": "assistant", "content": reply})
             bot.reply_to(message, reply)
 
 # تشغيل البوت واستمراريته

@@ -15,28 +15,19 @@ SYSTEM_PROMPT = (
 )
 
 
-async def ask_gemini(history: list[dict]) -> str:
-    if not settings.gemini_api_key:
-        return "ما في مفتاح AI، حط GEMINI_API_KEY في .env 🧠"
-
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={settings.gemini_api_key}"
-    )
-    payload = {"contents": history}
+async def ask_groq(messages: list[dict]) -> str:
+    if not settings.groq_api_key:
+        return "ما في مفتاح AI، حط GROQ_API_KEY في .env 🧠"
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {settings.groq_api_key}"}
+    payload = {"model": "llama-3.3-70b-versatile", "messages": messages}
     async with httpx.AsyncClient(timeout=20) as client:
         try:
-            resp = await client.post(url, json=payload)
+            resp = await client.post(url, json=payload, headers=headers)
             data = resp.json()
-            text = (
-                data.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-            )
-            return text or "مخي طفى هالدقيقة، اسألني بعد شوي 🧠🤖"
+            return data["choices"][0]["message"]["content"]
         except Exception as e:
-            logger.warning(f"Gemini API error: {e}")
+            logger.warning(f"Groq API error: {e}")
             return "سيرفر الذكاء نايم حالياً، خلنا نلعب أحسن 😴"
 
 
@@ -52,16 +43,16 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
 
     chat_id = str(update.effective_chat.id)
-    bot_data = context.bot_data.setdefault("gemini_memory", {})
+    bot_data = context.bot_data.setdefault("groq_memory", {})
     history = bot_data.get(chat_id, [])
-    history.append({"role": "user", "parts": [{"text": question}]})
+    history.append({"role": "user", "content": question})
 
-    full_history = [{"role": "user", "parts": [{"text": SYSTEM_PROMPT}]}]
-    full_history.extend(history[-20:])
+    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+    msgs.extend(history[-20:])
 
-    reply = await ask_gemini(full_history)
+    reply = await ask_groq(msgs)
 
-    history.append({"role": "model", "parts": [{"text": reply}]})
+    history.append({"role": "assistant", "content": reply})
     bot_data[chat_id] = history[-30:]
 
     await update.message.reply_text(reply)

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     log_level: str = "DEBUG"
     ai_api_url: str = "https://text.pollinations.ai"
+    groq_api_key: str = ""
     gemini_api_key: str = ""
     owner_id: int | None = None
 
