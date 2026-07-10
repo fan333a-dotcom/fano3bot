@@ -1,204 +1,463 @@
-from __future__ import annotations
-
-import asyncio
 import os
-import sys
-from pathlib import Path
+import telebot
+import random
+import requests
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+for line in open(".env"):
+    line = line.strip()
+    if line and not line.startswith("#") and "=" in line:
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip())
 
-from telegram.ext import Application, ApplicationBuilder, MessageHandler, filters
-from loguru import logger
-from fastapi import FastAPI  # استيراد FastAPI المدمج لديك
-import uvicorn
+TOKEN = os.environ.get("BOT_TOKEN") or '8826743057:AAG3PVj8vTGCG_bh2Mr3CJnKsemMHPxBe0U'
+bot = telebot.TeleBot(TOKEN)
 
-from src.config import settings
-from src.utils.logger import setup_logger
-from src.database.engine import init_db
-from src.handlers.games import get_game_handlers
-from src.handlers.admin import get_admin_handlers
-from src.handlers.misc import get_misc_handlers
-from src.handlers.ai import get_ai_handlers
-from src.handlers.welcome import get_welcome_handlers
-from src.handlers.azkar import get_azkar_handlers
-# from src.handlers.youtube import get_youtube_handlers
-from src.protection.anti_spam import protection_service
-from src.analytics.tracker import analytics_tracker
-from src.scheduler.tasks import scheduler_service
-from src.database.repository import ChatMemberRepository, MessageLogRepository
+# قاعدة بيانات مؤقتة في ذاكرة السيرفر لحفظ التفاعل
+user_points = {}
+# أدمنية البوت (رفع ادمن/تنزيل ادمن) — {chat_id: set(user_ids)}
+promoted_admins: dict[int, set[int]] = {}
 
+# قائمة الفلترة والحماية (الكلمات الممنوعة)
+bad_words = [
+    "كلب", "حمار", "غبي", "تفه", "منحط", "يا كلب", "يا حمار", "تيس", "يا تيس", 
+    "حيوان", "يا حيوان", "كلاب", "الحمار", "الكلب", "تفو", "قليل حيا"
+]
 
-# --- إعداد تطبيق FastAPI من أجل Render ---
-web_app = FastAPI()
+# ========================================================
+# 📚 بنك البيانات العملاق للألعاب والفعاليات والردود
+# ========================================================
 
-@web_app.get("/")
-async def home():
-    return {"status": "Fanou3 Bot is alive and running via FastAPI!"}
-# ------------------------------------------
+قائمة_لو_خيروك = [
+    "تاكل بصل ني 🧅 أو تاكل ليمونة كاملة بقشرها 🍋؟",
+    "تعيش بدون جوال أسبوع 📱 أو بدون نت شهر 🌐؟",
+    "تصير غني وتعيش لحالك 💰 أو على قد حالك ومعك ربعك 👥؟",
+    "تسافر للمستقبل وتشوف نفسك 🚀 أو ترجع للماضي وتغير غلطة ⏳؟",
+    "تختفي وتسمع وش يقولون الناس عنك 👻 أو تقرأ أفكارهم بلمسة 🧠؟",
+    "تعيش في غابة مع حيوانات أليفة 🦁 أو تعيش بقصر فخم لحالك 🏰؟",
+    "تنام في مقبرة ليلة كاملة لحالك 🪦 أو تسبح مع قروش في البحر 🦈؟",
+    "تخسر كل فلوسك الحين 💸 أو تخسر كل ذكريات طفولتك 🧠؟",
+    "تتكلم بصوت عالي طول عمرك 📢 أو تهمس همس طول عمرك 🤫؟",
+    "تتحكم بالوقت (توقفه وترجعه) ⏳ أو تطير في السماء زي الصقر 🦅؟",
+    "تاكل وجبة وحدة طول حياتك 🍔 أو كل يوم تاكل أكلة جديدة طعمها غريب 🤮؟",
+    "تعيش بدون مكيف في الصيف 🥵 أو بدون دفاية في الشتاء 🥶؟",
+    "تكون مشهور ومكروه من الناس 🎭 أو مجهول والكل يحبك إذا شافك 🤍؟",
+    "تتخلى عن ذكائك وتصير سعيد ومفهي 🥴 أو تضل ذكي وحزين 🧠؟",
+    "تاكل ملعقة شطة حارة جداً 🌶️ أو تشرب كاسة موية مالحة 🌊؟",
+    "تمشي حافي على رمل حار 🥵 أو تمشي حافي على ثلج 🥶؟"
+]
 
-async def protection_middleware(update, context):
-    if not update.message or not update.message.text:
+قائمة_كت_تويت = [
+    "أكثر صفة تكرهها في الشخص اللي قدامك؟ 🧐",
+    "لو كان عندك قوة خارقة، وش تختار تكون؟ 🦸‍♂️",
+    "وش آخر مصيبة سويتها وجوالك طافي؟ 💀",
+    "اعتراف خطير بدون ذكر أسماء؟ 🤫",
+    "شخص بالجروب ودك تعطيه كف وتطلع؟ 😂 (بدون منشن)",
+    "لو باقي يوم واحد بالعالم وش بتسوي فيه؟ 🌍",
+    "أكثر أكلة مستحيل تاكلها لو تموت جوع؟ 🤮",
+    "هل تؤمن بالحب من أول نظرة، ولا السالفة كلها كذب؟ 👁️❤️",
+    "لو فتحنا معرض لعيوبك، وش بيكون المَعْروض الرئيسي؟ 🖼️",
+    "وش الكلمة اللي لو حد قالها لك الحين تبتسم تلقائياً؟ 😊",
+    "شيء سويته بالماضي وكل ما تتذكره تحس بالندم أو الفشلة؟ 🤦‍♂️",
+    "لو خيروك تسمي نفسك اسم جديد الحين، وش بتختار؟ 📝",
+    "تفضل الصديق العاقل الزيادة، ولا الصديق الفاصل اللي يوديك بداهية؟ 🤣",
+    "متى كانت آخر مرة بكيت فيها ومن قلب؟ 😢",
+    "شيء غريب تحب تسويه لما تكون لحالك بالبيت؟ 🏠🍿",
+    "لو حياتك عبارة عن فيلم، وش بيكون تصنيفه (كوميدي، دراما، رعب)؟ 🎬"
+]
+
+قائمة_نكت = [
+    "محشش شاف إشارة ممنوع الوقوف.. قام انبطح! 🏛️😂",
+    "واحد بخيل تزوج بخيلة.. جابوا ولد حطوه بالبنك! 💰🤣",
+    "نملة شافت عصير فراولة.. قالت: واو أخيراً شفت البحر الأحمر! 🐜🍓",
+    "محشش ضاعت محفظته راح يبلغ الشرطة، قالوا له: ولا يهمك روح البيت واحنا بنطلعها من تحت الأرض.. وهو راجع شاف عمال بلدية يحفرون الشارع، صاح عليهم: كفووو شدوا حيلكم لونها بني! 💼😂",
+    "واحد غبي راح يشتري عطر، سأله البائع: تبيه بخاخ ولا صب؟ قال: لا خله عصير أشربه هنا! 🧴🤣",
+    "ديك شاف بيضة مسلوقة، راح للدجاجة قال لها: وش هذا؟ شغالين حبوب منع حمل من وراي؟ 🐓😂",
+    "أستاذ سأل طالب غبي: اعطيني جملة فيها كلمة (سكر).. قال الطالب: شربت الشاهي الصبح.. قال الأستاذ: وين السكر؟ قال الطالب: ذاب بالشاهي يا أستاذ! ☕🤪",
+    "محشش اتصل بالخطوط الجوية قالهم: كم تستغرق الرحلة من هنا لأمريكا؟ قالوا له: ثانية واحدة يا فندم.. قال: شكراً، وقفل الخط! ✈️😭",
+    "واحد قروي دخل ماكدونالدز قالهم: عطوني واحد فلافل، قالوا له: ما عندنا، قال: طيب وش هاللوحة الكبيرة اللي حاطين فيها صورتي وأنا لابس شماغ؟ (طلع شعار كنتاكي)! 🍗😂"
+]
+
+قائمة_فعاليات = [
+    "🎯 فعالية الحين: كل واحد يكتب اسم أكثر شخص يثق فيه بالجروب!",
+    "🔮 فعالية الحين: أرسل آخر إيموجي استخدمته بالواتساب بدون كذب!",
+    "🎤 فعالية الحين: اكتب بيت شعر أو سطر من أغنية معلقة ببالك اليوم.",
+    "📱 فعالية الحين: كم نسبة شحن جوالك الحين؟ اللي شحنه أقل من 20% يروح يشحن!",
+    "📸 فعالية الحين: أرسل أكثر صورة مضحكة (ميمز) موجودة في استديو جوالك الحين!",
+    "💬 فعالية الحين: منشن لأكثر شخص يسولف بالجروب وقول له (خف علينا يا راديو)🎙️",
+    "🍽️ فعالية الحين: وش كان غداكم اليوم؟ اعترفوا بدون كذب 🥘",
+    "💡 فعالية الحين: اكتب كلمة (فنوع) وعطنا رأيك بالبوت بكل صراحة!",
+    "⏰ فعالية الحين: كم ساعة تقضيها على جوالك باليوم؟ (ادخل الإعدادات وصور الشاشة لو تجرؤ) 📱"
+]
+
+قائمة_صراحة = [
+    "هل سبق وسرقت شيء بسيط من أغراض أخوانك؟ 👀",
+    "مين الشخص اللي بالجروب وتتابع رسايله بصمت؟ 🤫",
+    "وش أكبر كذبة كذبتها على أهلك ومشت عليهم؟ 🤥",
+    "هل شكلك بالبطاقة الشخصية/الهوية يفشل ولا حلو؟ 🪪😂",
+    "لو شفت حبيبك القديم بالشارع بالصدفة، وش بتسوي؟ 🏃‍♂️",
+    "كم رصيدك بالحساب البنكي حالياً بدون خجل؟ 💵",
+    "هل أنت شخص غيور في العلاقات ولا عادي بارد؟ 🔥",
+    "وش أكثر عيب دايماً الناس يلاحظونه بشخصيتك؟ 😕"
+]
+
+قائمة_أمثال = [
+    "إذا كان الكلام من فضة فالسكوت من ذهب 🪙",
+    "القرش الأبيض ينفع في اليوم الأسود 💵",
+    "من حفر حفرة لأخيه وقع فيها 🕳️",
+    "يا داخل بين البصلة وقشرتها ما ينوبك إلا ريحتها 🧅",
+    "الذي بيته من زجاج لا يرمي الناس بالحجارة 🧱",
+    "عصفور في اليد خير من عشرة على الشجرة 🐦",
+    "القرعة تتباهى بشعر بنت أختها 👩‍🦲",
+    "امش في جنازة ولا تمش في جوازة 🚶‍♂️"
+]
+
+# ---- Google Gemini الذكاء الاصطناعي ---- 
+import json
+from collections import deque
+
+ai_memory: dict[int, deque] = {}
+
+SYSTEM_PROMPT_GEMINI = (
+    "أنت بوت تلغرام اسمك 'فنوع'. تتحدث باللهجة الفلسطينية العامية. "
+    "أنت فرفوش، محبوب، مضحك، وطبطاب. ردودك قصيرة ومختصرة (جملة أو جملتين)"
+)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or ""
+
+def ask_gemini(history: list[dict]) -> str:
+    if not GEMINI_API_KEY:
+        return "ما في مفتاح AI، حط GEMINI_API_KEY في .env 🧠"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
+    try:
+        resp = requests.post(url, json={"contents": history}, timeout=20)
+        data = resp.json()
+        text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+        return text or "مخي طفى هالدقيقة، اسألني بعد شوي 🧠🤖"
+    except Exception as e:
+        return "سيرفر الذكاء نايم حالياً، خلنا نلعب أحسن 😴"
+
+# ========================================================
+# �️ دوال مساعدة للأدمن والمشرفين
+# ========================================================
+
+def is_admin(chat_id, user_id):
+    if chat_id in promoted_admins and user_id in promoted_admins[chat_id]:
         return True
-    result = await protection_service.check_message(update, context)
-    if not result:
-        if update.message:
-            try:
-                await update.message.delete()
-            except:
-                pass
+    try:
+        member = bot.get_chat_member(chat_id, user_id)
+        return member.status in ['administrator', 'creator']
+    except:
+        return False
+
+
+def get_target_user(message):
+    if message.reply_to_message:
+        return message.reply_to_message.from_user
+
+    if message.entities:
+        for entity in message.entities:
+            if entity.type in ['text_mention', 'mention']:
+                if entity.type == 'text_mention' and entity.user:
+                    return entity.user
+                elif entity.type == 'mention':
+                    username = message.text[entity.offset:entity.offset + entity.length].lstrip('@')
+                    try:
+                        user = bot.get_chat_member(message.chat.id, username).user
+                        return user
+                    except:
+                        return None
+    return None
+
+
+def admin_only(message):
+    if not is_admin(message.chat.id, message.from_user.id):
+        bot.reply_to(message, "⚠️ هذه الأوامر خاصة بالمشرفين فقط.")
         return False
     return True
 
-
-async def handle_message(update, context):
-    if not update.message or not update.effective_user:
-        return
-
-    user = update.effective_user
-    chat = update.effective_chat
-    text = update.message.text.strip() if update.message.text else ""
-
-    from src.database.engine import async_session_factory
-    from src.database.repository import UserRepository, ChatRepository
-
-    async with async_session_factory() as session:
-        user_repo = UserRepository(session)
-        chat_repo = ChatRepository(session)
-        member_repo = ChatMemberRepository(session)
-        msg_repo = MessageLogRepository(session)
-
-        await user_repo.get_or_create(user.id, user.first_name, user.last_name, user.username)
-        await chat_repo.get_or_create(chat.id, chat.title, chat.type)
-
-        content_type = "text"
-        if update.message.photo:
-            content_type = "photo"
-        elif update.message.video:
-            content_type = "video"
-        elif update.message.animation:
-            content_type = "animation"
-        elif update.message.document:
-            content_type = "document"
-        elif update.message.sticker:
-            content_type = "sticker"
-
-        analytics_tracker.track_message(chat.id, user.id, text, content_type)
-
-        try:
-            await msg_repo.log(
-                chat_id=chat.id, user_id=user.id, message_id=update.message.message_id,
-                content_type=content_type, content_length=len(text),
-                has_link="http" in text.lower() or "t.me/" in text.lower(),
-                has_media=content_type != "text",
-            )
-        except Exception as e:
-            logger.debug(f"Failed to log message: {e}")
-            await session.rollback()
-
-        if text and not text.startswith("/"):
-            member = await member_repo.add_points(user.id, chat.id)
-            milestones = {15: "🌟", 50: "🎤", 150: "🔥", 300: "👑", 500: "💎", 1000: "🏆"}
-            rank_names = {
-                15: "بطل الجروب الناشئ", 50: "سفير المرح", 150: "نجم الدردشة الأول",
-                300: "وزير السوالف", 500: "أسطورة الجروب", 1000: "ملك التحدي 👑",
-            }
-            if member.points in milestones:
-                await update.message.reply_text(
-                    f"🎊🎊🎊 **مبروووك {user.first_name} !!!** 🎊🎊🎊\n"
-                    f"تخطيت حاجز **{member.points} نقطة** وصار لقبك: **{rank_names.get(member.points, 'عملاق التفاعل 💪')}**\n"
-                    f"الجروب كله يفتخر فيك والله! استمر يابطل 🔥🔥🔥",
-                    parse_mode="Markdown",
+# ========================================================
+# �🚨 ميزة المغادرة التلقائية الاحترافية + الترقية الفورية
+# ========================================================
+@bot.message_handler(content_types=['new_chat_members'])
+def on_bot_join(message):
+    for new_user in message.new_chat_members:
+        # إذا كان العضو المضاف هو البوت نفسه
+        if new_user.id == bot.get_me().id:
+            chat_id = message.chat.id
+            bot_username = bot.get_me().username
+            bot_member = bot.get_chat_member(chat_id, bot.get_me().id)
+            
+            # التحقق: هل أضيف كعضو عادي أم مشرف؟
+            if bot_member.status not in ['administrator', 'creator']:
+                # إنشاء زر الترقية الفوري بالصلاحيات اللازمة للجروبات
+                markup = InlineKeyboardMarkup()
+                admin_link = f"https://t.me/{bot_username}?startgroup=Commands&admin=ban_users+restrict_members+delete_messages+add_admins+change_info+invite_users+pin_messages"
+                upgrade_button = InlineKeyboardButton(text="اضغط هنا لرفع فنوع مشرف 👑", url=admin_link)
+                markup.add(upgrade_button)
+                
+                warning_text = (
+                    "⚠️ **تنبيه من البوت فنوع:**\n"
+                    "قمت بإضافة البوت كعضو في المجموعة! يجب رفعه مشرفاً لكي يتم تفعيله ويحميك.\n\n"
+                    "اضغط على الزر بالأسفل لرفعي مشرفاً بالصلاحيات المطلوبة فوراً وجاهزة 👇"
                 )
-
-
-async def error_handler(update, context):
-    logger.error(f"Update {update} caused error: {context.error}")
-
-
-async def post_init(application: Application):
-    await init_db()
-    scheduler_service.set_bot(application.bot)
-    await scheduler_service.start()
-    logger.info("Fanou3 Bot initialized successfully")
-
-
-async def post_stop(application: Application):
-    await scheduler_service.stop()
-    logger.info("Fanou3 Bot stopped")
-
-
-def build_application() -> Application:
-    application = (
-        ApplicationBuilder()
-        .token(settings.bot_token)
-        .post_init(post_init)
-        .post_stop(post_stop)
-        .build()
-    )
-
-    application.add_error_handler(error_handler)
-
-    async def message_logger(update, context):
-        await handle_message(update, context)
-        if update.message and update.effective_chat:
-            text = (update.message.text or "").strip()
-            if text.startswith("مسح"):
+                bot.send_message(chat_id, warning_text, reply_markup=markup, parse_mode="Markdown")
+                
+                # المغادرة التلقائية فوراً لحماية السيرفر واجبار صاحب الجروب على ترقيته
+                bot.leave_chat(chat_id)
                 return
-            from collections import deque
-            q = context.bot_data.setdefault("msg_q", {}).setdefault(
-                update.effective_chat.id, deque(maxlen=300)
+            else:
+                bot.send_message(chat_id, "🥳 كفو! تم تفعيل البوت فنوع بنجاح كـ مشرف بالجروب! اكتب 'الألعاب' وخلنا نفلها! 🔥")
+                return
+        else:
+            # الترحيب بالأعضاء العاديين الجدد
+            welcome_text = (
+                f"🎯 يا هلا وغلا بـ {new_user.first_name} نورت جروبنا السعيد! ✨\n"
+                "اكتب كلمة **'تم'** وسولف معنا عشان تجمع نقاط وتأخذ ألقاب فخمة بالجروب! 🔥"
             )
-            q.append(update.message.message_id)
+            bot.send_message(message.chat.id, welcome_text)
 
-    application.add_handler(
-        MessageHandler(filters.ALL & ~filters.COMMAND, message_logger, block=False),
-        group=-1,
-    )
+# ========================================================
+# ⚙️ قراءة الرسائل، الألعاب، الردود الذكية والذكاء الاصطناعي
+# ========================================================
+@bot.message_handler(func=lambda message: True)
+def main_handler(message):
+    user_id = message.from_user.id
+    user_name = message.from_user.first_name
+    text = message.text.strip() if message.text else ""
 
-    other_handlers = []
-    other_handlers.extend(get_welcome_handlers())
-    other_handlers.extend(get_admin_handlers())
-    other_handlers.extend(get_game_handlers())
-    other_handlers.extend(get_ai_handlers())
-    other_handlers.extend(get_azkar_handlers())
-    other_handlers.extend(get_misc_handlers())
+    # ---- [حماية] منع الروابط الإعلانية ----
+    if "http://" in text.lower() or "https://" in text.lower() or "t.me/" in text.lower():
+        try:
+            chat_member = bot.get_chat_member(message.chat.id, user_id)
+            if chat_member.status not in ['administrator', 'creator']:
+                bot.delete_message(message.chat.id, message.message_id)
+                bot.send_message(message.chat.id, f"⚠️ عذراً يا {user_name}، الروابط ممنوعة هنا للحماية من الإعلانات! ⛔")
+                return
+        except:
+            pass
 
-    for handler in other_handlers:
-        application.add_handler(handler)
+    # ---- [حماية] منع الكلمات البذيئة ----
+    if any(word in text for word in bad_words):
+        try:
+            bot.delete_message(message.chat.id, message.message_id)
+            bot.send_message(message.chat.id, f"🤫 أستغفر الله! يا {user_name} جروبنا محترم وما نبي كلام يزعل الأعضاء! 🥛")
+            return
+        except:
+            pass
 
-    return application
+    # ---- نظام زيادة نقاط التفاعل ----
+    if user_id not in user_points:
+        user_points[user_id] = 0
+    user_points[user_id] += 1 
 
+    # ================= قـائـمـة الأوامـر والـألـعـاب العـربـيـة =================
 
-async def main():
-    setup_logger()
-    logger.info("🚀 Starting Fanou3 Bot...")
-    
-    application = build_application()
+    if text == "الألعاب" or text == "الاوامر" or text == "الالعاب" or text == "قائمة الألعاب":
+        menu = (
+            "🎮 **قائمة ألعاب وفعاليات فنوع العملاقة:**\n"
+            "(اكتب الكلمة مباشرة بدون فواصل أو رموز إنجليزية)\n\n"
+            "🔹 **لو خيروك** -> خيارات صعبة ومحرجة 🤔\n"
+            "🔹 **كت تويت** -> أسئلة لتحريك الشات والسوالف 💬\n"
+            "🔹 **نكتة** -> أحدث وأقوى النكت التليجرامية 🤣\n"
+            "🔹 **فعالية** -> يطرح فعالية حماسية للجروب الحين ✨\n"
+            "🔹 **صراحة** -> سؤال صراحة قوي ومحرج 🤫\n"
+            "🔹 **مثل** -> يعطيك مَثَل عربي قديم وحكمة 📜\n"
+            "🔹 **نسبة الحب** -> تقيس المحبة والانسجام بالجروب 🥰\n"
+            "🔹 **معلوماتي** -> كشف حساب لنقاطك ورتبتك الحالية 📊\n\n"
+            "💡 **شات الذكاء الاصطناعي المطور:**\n"
+            "نادني بكلمة (يا فنوع) واكتب سؤالك بعدها مباشرة، وبسولف معك كأني خويك بالجروب! 🧠🤖"
+        )
+        bot.reply_to(message, menu)
 
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(
-        allowed_updates=["message", "chat_member", "my_chat_member"],
-    )
+    elif text == "لو خيروك":
+        bot.reply_to(message, f"🤔 **لو خيروك:**\n\n{random.choice(قائمة_لو_خيروك)}")
 
-    logger.info("Bot is running. Setting up FastAPI web server...")
+    elif text == "كت تويت":
+        bot.reply_to(message, f"💬 **كت تويت:**\n\n{random.choice(قائمة_كت_تويت)}")
 
-    # تشغيل سيرفر Uvicorn بداخل نفس الـ Event Loop الخاص بـ Asyncio
-    # هذا يضمن تشغيل السيرفر وتجاوز فحص Render بنجاح دون التأثير على البوت
-    port = int(os.environ.get("PORT", 8080))
-    config = uvicorn.Config(app=web_app, host="0.0.0.0", port=port, log_level="info")
-    server = uvicorn.Server(config)
-    
-    try:
-        await server.serve()
-    except asyncio.CancelledError:
-        pass
-    finally:
-        logger.info("Shutting down...")
-        await application.updater.stop()
-        await application.stop()
-        await application.shutdown()
+    elif text == "نكتة" or text == "نكته":
+        bot.reply_to(message, f"🤣 **خذ هالنكتة وسلك لي:**\n\n{random.choice(قائمة_نكت)}")
 
+    elif text == "فعالية" or text == "فعاليه":
+        bot.reply_to(message, f"{random.choice(قائمة_فعاليات)}")
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    elif text == "صراحة" or text == "صراحه":
+        bot.reply_to(message, f"🤫 **سؤال صراحة قوي لـ {user_name}:**\n\n{random.choice(قائمة_صراحة)}")
+
+    elif text == "مثل" or text == "مثله":
+        bot.reply_to(message, f"📜 **من حكم وأمثال زمان:**\n\n{random.choice(قائمة_أمثال)}")
+
+    elif text == "نسبة الحب" or text == "نسبه الحب":
+        percentage = random.randint(0, 100)
+        if percentage < 30:
+            bot.reply_to(message, f"🥰 نسبة الحب بينك وبين الشات الحين هي: **{percentage}%** 💔 (الوضع جفاف عاطفي وتكفيكم الابتسامة!)")
+        elif percentage < 70:
+            bot.reply_to(message, f"🥰 نسبة الحب بينك وبين الشات الحين هي: **{percentage}%** 🧡 (علاقة طيبة وصداقة مستقرة)")
+        else:
+            bot.reply_to(message, f"🥰 نسبة الحب بينك وبين الشات الحين هي: **{percentage}%** ❤️ (عشق وغرام والجروب كله يحبك!)")
+
+    elif text == "معلوماتي":
+        points = user_points.get(user_id, 1)
+        if points < 15: rank = "عضو جديد خجول 👶"
+        elif points < 50: rank = "منور السهرة والجروب 🌟"
+        elif points < 150: rank = "المتحدث اللبق للجروب 🎤"
+        else: rank = "شيخ الجروب والقلب النابض للدردشة 👑"
+        
+        status_text = f"📊 **بطاقة هويتك التفاعلية:**\n\n👤 اسمك الكريم: {user_name}\n🪙 عدد رسائلك ونقاطك: {points}\n🎖️ رتبتك الحالية: {rank}"
+        bot.reply_to(message, status_text)
+
+    # ================= أوامر مشرفين وإدارة =================
+    elif text == "قائمة الأدمن":
+        if not admin_only(message):
+            return
+        admin_menu = (
+            "🛡️ **أوامر الأدمن في فنوع:**\n"
+            "- ارفض (رد على رسالة) -> يحظر مؤقتاً أو يبند حسب الحاجة\n"
+            "- كيك (رد على رسالة) -> يطرد العضو من الجروب\n"
+            "- اسكت (رد على رسالة) -> يكتم العضو 60 ثانية\n"
+            "- فك اسكت (رد على رسالة) -> يفك الكتم عن العضو\n"
+            "- حظر (رد على رسالة أو @username) -> يمنع العضو من الجروب\n"
+            "- رفع صوتي -> يرفع صوت البوت ويشير إنه شغال\n"
+            "- تنزيل صوتي -> يوقف صوت البوت ويشير إنه هادي\n"
+        )
+        bot.reply_to(message, admin_menu)
+
+    elif text.startswith("حظر"):
+        if not admin_only(message):
+            return
+        target = get_target_user(message)
+        if not target:
+            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر حظر.")
+            return
+        try:
+            bot.kick_chat_member(message.chat.id, target.id)
+            bot.reply_to(message, f"✅ تم حظر {target.first_name} من المجموعة.")
+        except Exception as e:
+            bot.reply_to(message, f"⚠️ ما قدرت أحظر العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
+
+    elif text.startswith("طرد") or text.startswith("كيك"):
+        if not admin_only(message):
+            return
+        target = get_target_user(message)
+        if not target:
+            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر كيك.")
+            return
+        try:
+            bot.kick_chat_member(message.chat.id, target.id)
+            bot.unban_chat_member(message.chat.id, target.id)
+            bot.reply_to(message, f"✅ تم طرد {target.first_name} من المجموعة.")
+        except Exception as e:
+            bot.reply_to(message, f"⚠️ ما قدرت أطرد العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
+
+    elif text.startswith("اسكت"):
+        if not admin_only(message):
+            return
+        target = get_target_user(message)
+        if not target:
+            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر اسكت.")
+            return
+        try:
+            permissions = ChatPermissions(can_send_messages=False)
+            bot.restrict_chat_member(message.chat.id, target.id, permissions=permissions, until_date=None)
+            bot.reply_to(message, f"✅ تم كتم {target.first_name} مؤقتاً.")
+        except Exception as e:
+            bot.reply_to(message, f"⚠️ ما قدرت أكتم العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
+
+    elif text.startswith("فك اسكت"):
+        if not admin_only(message):
+            return
+        target = get_target_user(message)
+        if not target:
+            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر فك اسكت.")
+            return
+        try:
+            permissions = ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_polls=True,
+                                          can_send_other_messages=True, can_add_web_page_previews=True, can_change_info=False,
+                                          can_invite_users=True, can_pin_messages=False)
+            bot.restrict_chat_member(message.chat.id, target.id, permissions=permissions)
+            bot.reply_to(message, f"✅ تم رفع الكتم عن {target.first_name}.")
+        except Exception as e:
+            bot.reply_to(message, f"⚠️ ما قدرت أفك الكتم، تأكد أني مشرف وعندي صلاحيات. \n{e}")
+
+    elif text == "رفع صوتي":
+        if not admin_only(message):
+            return
+        bot.reply_to(message, "🔊 تم تفعيل وضع الزعلان، البوت جاهز وأعلى صوت!")
+
+    elif text == "تنزيل صوتي":
+        if not admin_only(message):
+            return
+        bot.reply_to(message, "🤫 تم تفعيل وضع الهدوء، البوت سيصبح خفيف وهادي.")
+
+    elif text.startswith("رفع ادمن"):
+        if user_name != "فَـنّـعِـهْ" and user_id != 5544674713:
+            bot.reply_to(message, "⚠️ هاد الأمر بس للمالك.")
+            return
+        target = get_target_user(message)
+        if not target:
+            bot.reply_to(message, "❌ رد على رسالة العضو اللي بدك ترفعه.")
+            return
+        cid = message.chat.id
+        promoted_admins.setdefault(cid, set()).add(target.id)
+        bot.reply_to(message, f"✅ تم رفع {target.first_name} إلى أدمن في البوت.")
+
+    elif text.startswith("تنزيل ادمن"):
+        if user_name != "فَـنّـعِـهْ" and user_id != 5544674713:
+            bot.reply_to(message, "⚠️ هاد الأمر بس للمالك.")
+            return
+        target = get_target_user(message)
+        if not target:
+            bot.reply_to(message, "❌ رد على رسالة العضو اللي بدك تنزله.")
+            return
+        cid = message.chat.id
+        if cid in promoted_admins:
+            promoted_admins[cid].discard(target.id)
+        bot.reply_to(message, f"✅ تم تنزيل {target.first_name} من أدمن البوت.")
+
+    # ================= قائمة الردود التلقائية الفكاهية واليومية =================
+    elif "طفش" in text or "ملل" in text:
+        bot.reply_to(message, "افا! الطفش ممنوع بوجود فنوع 🥳 اكتب كلمة 'الألعاب' وخلنا نفلها ونطرد الملل!")
+        
+    elif text == "باك" or text == "بااك":
+        bot.reply_to(message, f"أحلى وأجمل باك في العالم! منورنا يا {user_name} ورجعت لنا الضحكة ✨")
+        
+    elif text == "برب":
+        bot.reply_to(message, f"لا تطول علينا يا {user_name}، الجروب بيظلم وبنصير نشتاق لك! 🏃‍♂️")
+        
+    elif "سلام" in text or text == "السلام عليكم":
+        bot.reply_to(message, f"وعليكم السلام ورحمة الله وبركاته! يا هلا وغلا بـ {user_name} نورتنا يا عسل 🌸")
+
+    elif text == "فنوع" or text == "يا فنوع":
+        bot.reply_to(message, "لبيه وسعدك! عيون فنوع وروحه تآمرك. اكتب 'الألعاب' عشان نلعب، أو اسألني بـ (يا فنوع...) وبجاوبك فوراً 😉")
+
+    elif "هههه" in text or "خخخخ" in text:
+        responses = ["جعلها دوم هالضحكة يا رب! 😂", "ضحكتك تفتح النفس وربي 🤍", "تدوم الضحكة الحلوة يا عسل 🥰"]
+        bot.reply_to(message, random.choice(responses))
+
+    elif text == "تصبحون على خير" or text == "بنام":
+        bot.reply_to(message, f"تلاقي الخير يا {user_name} 🌙 أحلام سعيدة ونوم العوافي، لا تنسى تصحى وتجيب لنا كيك بكرا! 🍰")
+
+    elif text == "الحمد لله" or text == "الحمدلله":
+        bot.reply_to(message, "الحمد لله دائماً وأبداً على كل حال 🤲 ربي يديم عليك النعمة والراحة.")
+
+    # ================= شات الذكاء الاصطناعي (يا فنوع + السؤال) =================
+    elif text.startswith("يا فنوع ") or text.startswith("فنوع "):
+        question = text.replace("يا فنوع", "").replace("فنوع", "").strip()
+        if not question:
+            bot.reply_to(message, "لبيه! ناديتني؟ اسألني أي شيء وبجاوبك، مثلاً: (يا فنوع عطني نصيحة مضحكة) 🤖")
+        else:
+            bot.send_chat_action(message.chat.id, 'typing')
+            cid = message.chat.id
+            if cid not in ai_memory:
+                ai_memory[cid] = deque(maxlen=30)
+            ai_memory[cid].append({"role": "user", "parts": [{"text": question}]})
+            full = [{"role": "user", "parts": [{"text": SYSTEM_PROMPT_GEMINI}]}]
+            full.extend(list(ai_memory[cid])[-20:])
+            reply = ask_gemini(full)
+            ai_memory[cid].append({"role": "model", "parts": [{"text": reply}]})
+            bot.reply_to(message, reply)
+
+# تشغيل البوت واستمراريته
+import sys; sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+print("🚀 البوت العملاق 'فنوع' شغال الآن بكفاءة واحترافية وبدون أوامر إنجليزية...")
+bot.infinity_polling()
