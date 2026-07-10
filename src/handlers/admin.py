@@ -217,8 +217,16 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             ids.add(reply_id)
 
         if count > len(ids):
-            start = max(2, cmd_id - count + 1)
-            ids.update(range(start, cmd_id + 1))
+            track = context.bot_data.setdefault("del_tracker", {}).setdefault(chat_id, {})
+            oldest = track.get("oldest")
+            if oldest:
+                start = max(2, oldest - count)
+                ids.update(range(start, oldest))
+            else:
+                start = max(2, cmd_id - count + 1)
+                ids.update(range(start, cmd_id + 1))
+            if reply_id is None:
+                track["oldest"] = min(ids)
 
         if not ids:
             return
