@@ -256,7 +256,7 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 name = chat_member.user.first_name or f"({m.user_id})"
             except:
                 name = f"({m.user_id})"
-            lines.append(f"{medals[i]} **{name}** — {m.points} نقطة 🪙")
+            lines.append(f"{medals[i]} {name}\n   │ 🏅 {m.points:,} نقطة  📧 {m.level}  🪙 {m.coins:,}")
 
         msg = (
             "📊 **ترتيب المتفاعلين في الجروب:**\n\n"
