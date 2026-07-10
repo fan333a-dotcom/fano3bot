@@ -70,10 +70,6 @@ async def handle_message(update, context):
         await user_repo.get_or_create(user.id, user.first_name, user.last_name, user.username)
         await chat_repo.get_or_create(chat.id, chat.title, chat.type)
 
-        if text in ("تم", "تمم", "tmm"):
-            await update.message.reply_text(f"💪 تسلم يا {user.first_name}! بداية قوية، استمر بالتفاعل واجمع النقاط! 🔥")
-            return
-
         content_type = "text"
         if update.message.photo:
             content_type = "photo"
@@ -142,22 +138,19 @@ def build_application() -> Application:
 
     application.add_error_handler(error_handler)
 
-    handlers = []
+    async def message_logger(update, context):
+        await handle_message(update, context)
+
+    handlers = [MessageHandler(filters.ALL & ~filters.COMMAND, message_logger, block=False)]
     handlers.extend(get_welcome_handlers())
     handlers.extend(get_admin_handlers())
     handlers.extend(get_game_handlers())
     handlers.extend(get_ai_handlers())
-    # handlers.extend(get_youtube_handlers())
     handlers.extend(get_azkar_handlers())
     handlers.extend(get_misc_handlers())
 
     for handler in handlers:
         application.add_handler(handler)
-
-    async def message_logger(update, context):
-        await handle_message(update, context)
-
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, message_logger), group=-1)
 
     return application
 
