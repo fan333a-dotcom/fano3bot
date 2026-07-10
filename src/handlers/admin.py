@@ -217,10 +217,8 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             ids.add(reply_id)
 
         if count > len(ids):
-            start = max(2, cmd_id - count)
-            ids.update(range(start, cmd_id))
-
-        ids.discard(cmd_id)
+            start = max(2, cmd_id - count + 1)
+            ids.update(range(start, cmd_id + 1))
 
         if not ids:
             return
