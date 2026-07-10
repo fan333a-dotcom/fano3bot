@@ -36,6 +36,23 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    async with engine.begin() as conn:
+        def _fix_schema(sync_conn):
+            from sqlalchemy import inspect, text
+            try:
+                inspector = inspect(sync_conn)
+                columns = {c["name"]: c for c in inspector.get_columns("message_logs")}
+                col = columns.get("id", {})
+                if col.get("type") and "BIGINT" in str(col["type"]).upper():
+                    sync_conn.execute(text("DROP TABLE IF EXISTS message_logs"))
+                    Base.metadata.create_all(sync_conn)
+                    import logging
+                    logging.getLogger(__name__).info("Fixed message_logs schema (BIGINT -> INTEGER)")
+            except Exception:
+                pass
+
+        await conn.run_sync(_fix_schema)
+
 
 async def get_session() -> AsyncSession:
     async with async_session_factory() as session:
