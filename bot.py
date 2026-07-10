@@ -140,6 +140,12 @@ def build_application() -> Application:
 
     async def message_logger(update, context):
         await handle_message(update, context)
+        if update.message and update.effective_chat:
+            from collections import deque
+            q = context.bot_data.setdefault("msg_q", {}).setdefault(
+                update.effective_chat.id, deque(maxlen=300)
+            )
+            q.append(update.message.message_id)
 
     application.add_handler(
         MessageHandler(filters.ALL & ~filters.COMMAND, message_logger, block=False),

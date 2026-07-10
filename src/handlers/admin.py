@@ -216,10 +216,9 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if reply_id is not None:
             ids.add(reply_id)
 
-        async with async_session_factory() as session:
-            msg_repo = MessageLogRepository(session)
-            recent = await msg_repo.get_recent_message_ids(chat_id, count)
-            for mid in recent:
+        q = context.bot_data.get("msg_q", {}).get(chat_id)
+        if q:
+            for mid in list(q)[-count:]:
                 ids.add(mid)
 
         id_list = sorted(ids)[:100]
