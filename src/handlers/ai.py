@@ -1,27 +1,43 @@
 from __future__ import annotations
 
-import random
+import json
 
 import httpx
 from telegram import Update
 from telegram.ext import ContextTypes, MessageHandler, filters
+from loguru import logger
 
 from src.config import settings
 
+SYSTEM_PROMPT = (
+    "أنت بوت تلغرام اسمك 'فنوع'. تتحدث باللهجة الفلسطينية العامية. "
+    "أنت فرفوش، محبوب، مضحك، وطبطاب. ردودك قصيرة ومختصرة (جملة أو جملتين)"
+)
 
-async def ask_ai(question_text: str) -> str:
-    try:
-        prompt = (
-            f"أنت بوت تلغرام اسمك 'فنوع'. أنت فرفوش، محبوب، ومضحك "
-            f"وتتحدث باللهجة الفلسطينية العامية الطريفة جداً. رد باختصار وبطرافة على هذا السؤال: {question_text}"
-        )
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(f"{settings.ai_api_url}/{prompt}")
-            if response.status_code == 200:
-                return response.text
-            return "والله يا صاحبي مخي معلق هالدقيقة، اسألني بعد شوي! 🧠🤖"
-    except:
-        return "سيرفرات الذكاء الاصطناعي نايمة حالياً، خلنا نلعب أحسن! 😴"
+
+async def ask_gemini(history: list[dict]) -> str:
+    if not settings.gemini_api_key:
+        return "ما في مفتاح AI، حط GEMINI_API_KEY في .env 🧠"
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"gemini-2.0-flash:generateContent?key={settings.gemini_api_key}"
+    )
+    payload = {"contents": history}
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            resp = await client.post(url, json=payload)
+            data = resp.json()
+            text = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            )
+            return text or "مخي طفى هالدقيقة، اسألني بعد شوي 🧠🤖"
+        except Exception as e:
+            logger.warning(f"Gemini API error: {e}")
+            return "سيرفر الذكاء نايم حالياً، خلنا نلعب أحسن 😴"
 
 
 async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -34,8 +50,21 @@ async def ai_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
-    ai_reply = await ask_ai(question)
-    await update.message.reply_text(ai_reply)
+
+    chat_id = str(update.effective_chat.id)
+    bot_data = context.bot_data.setdefault("gemini_memory", {})
+    history = bot_data.get(chat_id, [])
+    history.append({"role": "user", "parts": [{"text": question}]})
+
+    full_history = [{"role": "user", "parts": [{"text": SYSTEM_PROMPT}]}]
+    full_history.extend(history[-20:])
+
+    reply = await ask_gemini(full_history)
+
+    history.append({"role": "model", "parts": [{"text": reply}]})
+    bot_data[chat_id] = history[-30:]
+
+    await update.message.reply_text(reply)
 
 
 def get_ai_handlers() -> list:
