@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 
 from telegram import Update, ChatPermissions, ChatMember as TGChatMember
@@ -198,6 +199,50 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text(menu, parse_mode=ParseMode.MARKDOWN)
 
 
+async def tag_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await admin_only(update, context):
+        return
+    chat_id = update.effective_chat.id
+    async with async_session_factory() as session:
+        repo = ChatMemberRepository(session)
+        user_ids = await repo.get_all_member_ids(
+            chat_id, exclude_roles=[UserRole.BLACKLISTED]
+        )
+    if not user_ids:
+        await update.message.reply_text("ما في أعضاء للتاق.")
+        return
+
+    async def _get_mention(uid: int) -> str | None:
+        try:
+            member = await context.bot.get_chat_member(chat_id, uid)
+            u = member.user
+            return f'<a href="tg://user?id={u.id}">{u.first_name}</a>'
+        except Exception:
+            return None
+
+    results = await asyncio.gather(*[_get_mention(uid) for uid in user_ids])
+    mentions = [m for m in results if m is not None]
+
+    if not mentions:
+        await update.message.reply_text("ما في أعضاء للتاق.")
+        return
+
+    chunks = []
+    current = ""
+    for m in mentions:
+        candidate = f"{current} {m}" if current else m
+        if len(candidate) > 3900:
+            chunks.append(current)
+            current = m
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+
+    for chunk in chunks:
+        await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+
+
 async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         text = (update.message.text or "").strip()
@@ -254,4 +299,5 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^اسكت"), mute),
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
         MessageHandler(filters.Regex(r"^مسح"), delete_messages),
+        MessageHandler(filters.Regex(r"^تاق"), tag_all),
     ]

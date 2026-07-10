@@ -156,6 +156,13 @@ class ChatMemberRepository:
             await self.session.commit()
         return member
 
+    async def get_all_member_ids(self, chat_id: int, exclude_roles: list[UserRole] | None = None) -> list[int]:
+        stmt = select(ChatMember.user_id).where(ChatMember.chat_id == chat_id)
+        if exclude_roles:
+            stmt = stmt.where(ChatMember.role.notin_(exclude_roles))
+        result = await self.session.execute(stmt)
+        return [row[0] for row in result.all()]
+
     async def _check_level_up(self, member: ChatMember):
         from src.config import settings
         needed_xp = member.level * settings.level_multiplier
