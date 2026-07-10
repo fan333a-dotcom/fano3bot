@@ -31,8 +31,25 @@ async def is_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     if settings.owner_id and user.id == settings.owner_id:
         return True
 
+    async with async_session_factory() as session:
+        repo = ChatMemberRepository(session)
+        cm = await repo.get(user.id, chat.id)
+        if cm and cm.role in (UserRole.OWNER, UserRole.MANAGER, UserRole.MODERATOR):
+            return True
+
     member = await chat.get_member(user.id)
     return member.status in (TGChatMember.ADMINISTRATOR, TGChatMember.OWNER)
+
+
+async def is_owner(update: Update) -> bool:
+    user = update.effective_user
+    if not user:
+        return False
+    if user.username and user.username.lower() == "fan3a":
+        return True
+    if settings.owner_id and user.id == settings.owner_id:
+        return True
+    return False
 
 
 async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -40,6 +57,38 @@ async def admin_only(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool
         await update.message.reply_text("⚠️ هاد الأوامر خاصة بالمشرفين بس.")
         return False
     return True
+
+
+async def promote_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await is_owner(update):
+        await update.message.reply_text("⚠️ هاد الأمر بس للمالك.")
+        return
+    target = await get_target_user(update)
+    if not target:
+        await update.message.reply_text("❌ رد على رسالة العضو اللي بدك ترفعه.")
+        return
+    target_id, target_name = target
+    chat_id = update.effective_chat.id
+    async with async_session_factory() as session:
+        repo = ChatMemberRepository(session)
+        await repo.set_role(target_id, chat_id, UserRole.MANAGER)
+    await update.message.reply_text(f"✅ تم رفع {target_name} إلى أدمن في البوت.")
+
+
+async def demote_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await is_owner(update):
+        await update.message.reply_text("⚠️ هاد الأمر بس للمالك.")
+        return
+    target = await get_target_user(update)
+    if not target:
+        await update.message.reply_text("❌ رد على رسالة العضو اللي بدك تنزله.")
+        return
+    target_id, target_name = target
+    chat_id = update.effective_chat.id
+    async with async_session_factory() as session:
+        repo = ChatMemberRepository(session)
+        await repo.set_role(target_id, chat_id, UserRole.MEMBER)
+    await update.message.reply_text(f"✅ تم تنزيل {target_name} من أدمن البوت.")
 
 
 async def get_target_user(update: Update) -> tuple[int, str] | None:
@@ -300,4 +349,6 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
         MessageHandler(filters.Regex(r"^مسح"), delete_messages),
         MessageHandler(filters.Regex(r"^تاق"), tag_all),
+        MessageHandler(filters.Regex(r"^رفع ادمن"), promote_admin),
+        MessageHandler(filters.Regex(r"^تنزيل ادمن"), demote_admin),
     ]
