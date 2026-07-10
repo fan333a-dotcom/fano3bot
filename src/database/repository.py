@@ -300,7 +300,7 @@ class MessageLogRepository:
         result = await self.session.execute(stmt)
         return result.scalar() or 0
 
-    async def get_recent_message_ids(self, chat_id: int, limit: int = 10) -> list[int]:
+    async def get_recent_message_ids(self, chat_id: int, limit: int = 10, exclude_ids: set[int] | None = None) -> list[int]:
         stmt = (
             select(MessageLog.message_id)
             .where(MessageLog.chat_id == chat_id)
@@ -308,7 +308,19 @@ class MessageLogRepository:
             .limit(min(limit, 100))
         )
         result = await self.session.execute(stmt)
-        return [row[0] for row in result.all()]
+        ids = [row[0] for row in result.all()]
+        if exclude_ids:
+            ids = [mid for mid in ids if mid not in exclude_ids]
+        return ids
+
+    async def delete_by_message_ids(self, chat_id: int, message_ids: list[int]) -> int:
+        stmt = delete(MessageLog).where(
+            MessageLog.chat_id == chat_id,
+            MessageLog.message_id.in_(message_ids),
+        )
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount
 
 
 class FilterRepository:

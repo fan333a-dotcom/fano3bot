@@ -221,13 +221,27 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             for mid in list(q)[-count:]:
                 ids.add(mid)
 
+        async with async_session_factory() as session:
+            msg_repo = MessageLogRepository(session)
+            db_ids = await msg_repo.get_recent_message_ids(chat_id, count, exclude_ids=ids)
+            for mid in db_ids:
+                ids.add(mid)
+
+        deleted: list[int] = []
         id_list = sorted(ids)[:100]
         logger.info(f"مسح: chat={chat_id} cmd={cmd_id} count={count} ids={id_list}")
         for mid in id_list:
             try:
                 await context.bot.delete_message(chat_id, mid)
+                deleted.append(mid)
             except Exception as e:
                 logger.debug(f"مسح failed {chat_id}/{mid}: {e}")
+
+        if deleted:
+            async with async_session_factory() as session:
+                msg_repo = MessageLogRepository(session)
+                removed = await msg_repo.delete_by_message_ids(chat_id, deleted)
+                logger.debug(f"مسح: removed {removed} rows from message_logs")
     except Exception as e:
         logger.error(f"Error in delete_messages: {e}")
 
