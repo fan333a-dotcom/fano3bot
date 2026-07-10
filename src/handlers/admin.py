@@ -244,5 +244,5 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^(طرد|كيك)"), kick),
         MessageHandler(filters.Regex(r"^اسكت"), mute),
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
-        MessageHandler(filters.TEXT, delete_messages),
+        MessageHandler(filters.Regex(r"^مسح"), delete_messages),
     ]
