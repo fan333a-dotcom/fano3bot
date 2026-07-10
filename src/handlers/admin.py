@@ -3,6 +3,7 @@ from __future__ import annotations
 from telegram import Update, ChatPermissions, ChatMember as TGChatMember
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, MessageHandler, filters
+from loguru import logger
 
 from src.config import settings
 from src.core.permissions import Permission, has_permission, can_moderate_target
@@ -196,45 +197,49 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await admin_only(update, context):
-        return
-
-    chat_id = update.effective_chat.id
-    text = update.message.text.strip()
-    ids = []
-
-    if update.message.reply_to_message:
-        ids.append(update.message.reply_to_message.message_id)
-
-    parts = text.split()
-    if len(parts) > 1 and parts[1].isdigit():
-        count = int(parts[1])
-        extra = count - len(ids)
-        if extra > 0:
-            async with async_session_factory() as session:
-                msg_repo = MessageLogRepository(session)
-                recent = await msg_repo.get_recent_message_ids(chat_id, extra)
-                ids.extend(recent)
-        ids = ids[:count]
-
-    if not ids:
-        await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
-        return
-
-    ids = list(dict.fromkeys(ids))
     try:
-        await context.bot.delete_messages(chat_id, ids[:100])
-        await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل.")
-    except Exception:
+        if not await admin_only(update, context):
+            return
+
+        chat_id = update.effective_chat.id
+        text = update.message.text.strip()
+        ids = []
+
+        if update.message.reply_to_message:
+            ids.append(update.message.reply_to_message.message_id)
+
+        parts = text.split()
+        if len(parts) > 1 and parts[1].isdigit():
+            count = int(parts[1])
+            extra = count - len(ids)
+            if extra > 0:
+                async with async_session_factory() as session:
+                    msg_repo = MessageLogRepository(session)
+                    recent = await msg_repo.get_recent_message_ids(chat_id, extra)
+                    ids.extend(recent)
+            ids = ids[:count]
+
+        if not ids:
+            await update.message.reply_text("❌ استخدم: `مسح` (رد على رسالة) أو `مسح 10` (بدون رد)")
+            return
+
+        ids = list(dict.fromkeys(ids))
         try:
-            for mid in ids:
+            await context.bot.delete_messages(chat_id, ids[:100])
+            await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل.")
+        except Exception:
+            for mid in ids[:100]:
                 try:
                     await context.bot.delete_message(chat_id, mid)
                 except:
                     pass
             await update.message.reply_text(f"✅ تم مسح {len(ids)} رسالة/رسائل (واحد واحد).")
-        except Exception:
+    except Exception as e:
+        logger.error(f"Error in delete_messages: {e}")
+        try:
             await update.message.reply_text("⚠️ ما قدرت أمسح، تأكد إني مشرف وعندي صلاحيات.")
+        except:
+            pass
 
 
 def get_admin_handlers() -> list:
@@ -245,4 +250,5 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^اسكت"), mute),
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
         MessageHandler(filters.Regex(r"^مسح"), delete_messages),
+        MessageHandler(filters.Text(["مسح"]), delete_messages),
     ]
