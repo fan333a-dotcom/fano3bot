@@ -224,14 +224,13 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if not ids:
             return
 
-        try:
-            await context.bot.delete_messages(chat_id, list(ids)[:100])
-        except Exception:
-            for mid in list(ids)[:100]:
-                try:
-                    await context.bot.delete_message(chat_id, mid)
-                except:
-                    pass
+        id_list = sorted(ids)[:100]
+        logger.info(f"مسح: chat={chat_id} cmd={cmd_id} count={count} ids={id_list}")
+        for mid in id_list:
+            try:
+                await context.bot.delete_message(chat_id, mid)
+            except Exception as e:
+                logger.debug(f"مسح failed {chat_id}/{mid}: {e}")
     except Exception as e:
         logger.error(f"Error in delete_messages: {e}")
 
