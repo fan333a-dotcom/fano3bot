@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import random
-from typing import Any
 
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import ContextTypes, MessageHandler, filters
 
+from src.database.engine import async_session_factory
 from src.database.repository import ChatMemberRepository
 
 # ---------- Game Data ----------
@@ -120,7 +120,6 @@ async def games_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "🔹 **حزورة** -> ألغاز وفوازير بتخلي مخك شغال 🧠\n"
         "🔹 **نسبة الحب** -> بتقيس المحبة والانسجام بالجروب 🥰\n"
         "🔹 **معلوماتي** -> كشف حساب لنقاطك ورتبتك الحالية 📊\n"
-        "🔹 **المتجر** -> اشتر ألقاب وألوان ومؤثرات 🛍️\n"
         "🔹 **كِشري** -> لعبة الحظ المثيرة 🎲\n\n"
         "💡 **شات الذكاء الاصطناعي المطور:**\n"
         "نادني بكلمة (يا فنوع) واكتب سؤالك بعدها مباشرة، وبسولف معك كأني خويك بالجروب! 🧠🤖"
@@ -203,41 +202,38 @@ async def معلوماتي(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     chat_id = update.effective_chat.id
     name = update.effective_user.first_name
 
-    member_repo: ChatMemberRepository = context.user_data.get("member_repo")
-    if not member_repo:
-        await update.message.reply_text("❌ النظام ليس جاهزاً بعد، حاول مرة أخرى.")
-        return
+    async with async_session_factory() as session:
+        member_repo = ChatMemberRepository(session)
+        member = await member_repo.get_or_create(user_id, chat_id)
+        points = member.points
 
-    member = await member_repo.get_or_create(user_id, chat_id)
-    points = member.points
+        if points < 15:
+            rank = "عضو جديد خجول 👶"
+        elif points < 50:
+            rank = "منور السهرة والجروب 🌟"
+        elif points < 150:
+            rank = "المتحدث اللبق للجروب 🎤"
+        elif points < 300:
+            rank = "نائب شيخ الجروب 👑"
+        elif points < 500:
+            rank = "شيخ الجروب والقلب النابض 👑🔥"
+        elif points < 1000:
+            rank = "أسطورة الجروب الخالدة 🏆"
+        else:
+            rank = "ملك فنوع الأول本王 👑🏆💎"
 
-    if points < 15:
-        rank = "عضو جديد خجول 👶"
-    elif points < 50:
-        rank = "منور السهرة والجروب 🌟"
-    elif points < 150:
-        rank = "المتحدث اللبق للجروب 🎤"
-    elif points < 300:
-        rank = "نائب شيخ الجروب 👑"
-    elif points < 500:
-        rank = "شيخ الجروب والقلب النابض 👑🔥"
-    elif points < 1000:
-        rank = "أسطورة الجروب الخالدة 🏆"
-    else:
-        rank = "ملك فنوع الأول本王 👑🏆💎"
-
-    status_text = (
-        f"📊 **بطاقة هويتك التفاعلية - {name}:**\n\n"
-        f"👤 **الاسم:** {name}\n"
-        f"🪙 **النقاط:** {points}\n"
-        f"🎖️ **الرتبة:** {rank}\n"
-        f"✨ **المستوى:** {member.level}\n"
-        f"💰 **العملات:** {member.coins}\n"
-        f"⭐ **السمعة:** {member.reputation:.1f}\n"
-        f"🔥 **التسجيل:** {member.streak_days} يوم\n\n"
-        f"{['بداية قوية استمر', 'ماشاء الله تبارك الله', 'أنت روح الجروب', 'ناررر يا بطل'][min(points // 50, 3)]}"
-    )
-    await update.message.reply_text(status_text, parse_mode="Markdown")
+        status_text = (
+            f"📊 **بطاقة هويتك التفاعلية - {name}:**\n\n"
+            f"👤 **الاسم:** {name}\n"
+            f"🪙 **النقاط:** {points}\n"
+            f"🎖️ **الرتبة:** {rank}\n"
+            f"✨ **المستوى:** {member.level}\n"
+            f"💰 **العملات:** {member.coins}\n"
+            f"⭐ **السمعة:** {member.reputation:.1f}\n"
+            f"🔥 **التسجيل:** {member.streak_days} يوم\n\n"
+            f"{['بداية قوية استمر', 'ماشاء الله تبارك الله', 'أنت روح الجروب', 'ناررر يا بطل'][min(points // 50, 3)]}"
+        )
+        await update.message.reply_text(status_text, parse_mode="Markdown")
 
 
 async def كِشري(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -245,37 +241,37 @@ async def كِشري(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
 
-    member_repo: ChatMemberRepository = context.user_data.get("member_repo")
-    if not member_repo:
-        return
+    async with async_session_factory() as session:
+        member_repo = ChatMemberRepository(session)
+        member = await member_repo.get_or_create(user_id, chat_id)
 
-    member = await member_repo.get_or_create(user_id, chat_id)
-    if member.coins < bet:
-        await update.message.reply_text("❌ ما عندك عملات كافية! اكتب 'معلوماتي' تشوف رصيدك.")
-        return
+        if member.coins < bet:
+            await update.message.reply_text("❌ ما عندك عملات كافية! اكتب 'معلوماتي' تشوف رصيدك.")
+            return
 
-    member.coins -= bet
-    outcome = random.choices(
-        ["lose", "small", "big", "jackpot"],
-        weights=[40, 30, 20, 10],
-    )[0]
+        member.coins -= bet
+        outcome = random.choices(
+            ["lose", "small", "big", "jackpot"],
+            weights=[40, 30, 20, 10],
+        )[0]
 
-    if outcome == "jackpot":
-        win = bet * 10
-        member.coins += win
-        msg = f"🎉🎉🎉 **جاكبوت!** ربحت **{win}** عملة! مبروك يا محظوظ! 🎉🎉🎉"
-    elif outcome == "big":
-        win = bet * 3
-        member.coins += win
-        msg = f"🔥 **فوز كبير!** ربحت **{win}** عملة!"
-    elif outcome == "small":
-        win = bet * 2
-        member.coins += win
-        msg = f"✅ فزت بـ **{win}** عملة. مش بطال!"
-    else:
-        msg = f"💔 خسرت **{bet}** عملة. جرب مرة ثانية!"
+        if outcome == "jackpot":
+            win = bet * 10
+            member.coins += win
+            msg = f"🎉🎉🎉 **جاكبوت!** ربحت **{win}** عملة! مبروك يا محظوظ! 🎉🎉🎉"
+        elif outcome == "big":
+            win = bet * 3
+            member.coins += win
+            msg = f"🔥 **فوز كبير!** ربحت **{win}** عملة!"
+        elif outcome == "small":
+            win = bet * 2
+            member.coins += win
+            msg = f"✅ فزت بـ **{win}** عملة. مش بطال!"
+        else:
+            msg = f"💔 خسرت **{bet}** عملة. جرب مرة ثانية!"
 
-    await update.message.reply_text(f"🎲 **كِشري:**\n\n{msg}", parse_mode="Markdown")
+        await update.message.reply_text(f"🎲 **كِشري:**\n\n{msg}", parse_mode="Markdown")
+        await session.commit()
 
 
 def get_game_handlers() -> list:
@@ -302,6 +298,7 @@ def get_game_handlers() -> list:
         "الالعاب": games_menu,
         "قائمة_الألعاب": games_menu,
         "كِشري": كِشري,
+        "كشري": كِشري,
     }
 
     return [
