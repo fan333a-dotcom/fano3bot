@@ -175,25 +175,13 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     menu = (
         "🛡️ **أوامر الأدمن في فنوع:**\n"
-        "- ارفض (رد على رسالة) -> يحظر مؤقتاً أو يبند حسب الحاجة\n"
-        "- كيك (رد على رسالة) -> يطرد العضو من الجروب\n"
-        "- اسكت (رد على رسالة) -> يكتم العضو 60 ثانية\n"
-        "- فك اسكت (رد على رسالة) -> يفك الكتم عن العضو\n"
-        "- حظر (رد على رسالة أو @username) -> يمنع العضو من الجروب\n"
-        "- رفع صوتي -> يرفع صوت البوت ويشير إنه شغال\n"
-        "- تنزيل صوتي -> يوقف صوت البوت ويشير إنه هادي\n"
+        "- ارفض (رد على رسالة) -> بحظر مؤقتاً أو ببند حسب الحاجة\n"
+        "- كيك (رد على رسالة) -> بطرد العضو من الجروب\n"
+        "- اسكت (رد على رسالة) -> بكتم العضو 60 ثانية\n"
+        "- فك اسكت (رد على رسالة) -> بفك الكتم عن العضو\n"
+        "- حظر (رد على رسالة أو @username) -> بمنع العضو من الجروب\n"
     )
     await update.message.reply_text(menu, parse_mode=ParseMode.MARKDOWN)
-
-
-async def رفع_صوتي(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if await admin_only(update, context):
-        await update.message.reply_text("🔊 تم تفعيل وضع الزعلان، البوت جاهز وأعلى صوت!")
-
-
-async def تنزيل_صوتي(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if await admin_only(update, context):
-        await update.message.reply_text("🤫 تم تفعيل وضع الهدوء، البوت رح يصير خفيف وهادي.")
 
 
 def get_admin_handlers() -> list:
@@ -203,6 +191,4 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^(طرد|كيك)"), kick),
         MessageHandler(filters.Regex(r"^اسكت"), mute),
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
-        MessageHandler(filters.Text(["رفع صوتي"]), رفع_صوتي),
-        MessageHandler(filters.Text(["تنزيل صوتي"]), تنزيل_صوتي),
     ]

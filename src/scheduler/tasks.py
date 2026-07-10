@@ -12,13 +12,27 @@ from src.database.repository import ScheduledJobRepository
 فعاليات = [
     "🎯 فعالية الحين: كل واحد يكتب اسم أكثر شخص يثق فيه بالجروب!",
     "🔮 فعالية الحين: أرسل آخر إيموجي استخدمته بالواتساب بدون كذب!",
-    "🎤 فعالية الحين: اكتب بيت شعر أو سطر من أغنية معلقة ببالك اليوم.",
-    "📱 فعالية الحين: كم نسبة شحن جوالك الحين؟ اللي شحنه أقل من 20% يروح يشحن!",
-    "📸 فعالية الحين: أرسل أكثر صورة مضحكة (ميمز) موجودة في استديو جوالك الحين!",
+    "📱 فعالية الحين: قديش نسبة شحن جوالك هلأ؟ اللي شحنه أقل من 20% يروح يشحن!",
+    "📸 فعالية الحين: أرسل أكثر صورة مضحكة (ميمز) موجودة في استديو جوالك!",
     "💬 فعالية الحين: منشن لأكثر شخص يسولف بالجروب وقول له (خف علينا يا راديو)🎙️",
-    "🍽️ فعالية الحين: وش كان غداكم اليوم؟ اعترفوا بدون كذب 🥘",
+    "🍽️ فعالية الحين: شو كان أكلكم اليوم؟ اعترفوا بدون كذب 🥘",
     "💡 فعالية الحين: اكتب كلمة (فنوع) وعطنا رأيك بالبوت بكل صراحة!",
-    "⏰ فعالية الحين: كم ساعة تقضيها على جوالك باليوم؟ (ادخل الإعدادات وصور الشاشة لو تجرؤ) 📱",
+    "⏰ فعالية الحين: قديش ساعة بتقضيها على جوالك باليوم؟ 📱",
+]
+
+أذكار = [
+    "🌿 **ذكر عشوائي:**\n\nاللهم بك أصبحنا وبك أمسينا وبك نحيا وبك نموت وإليك النشور 🤲",
+    "🌿 **ذكر عشوائي:**\n\nسبحان الله وبحمده عدد خلقه ورضا نفسه وزنة عرشه ومداد كلماته 🤲",
+    "🌿 **ذكر عشوائي:**\n\nاللهم أنت ربي لا إله إلا أنت، خلقتني وأنا عبدك 🤲",
+    "🌿 **ذكر عشوائي:**\n\nحسبي الله لا إله إلا هو، عليه توكلت، وهو رب العرش العظيم 🤲",
+    "🌿 **ذكر عشوائي:**\n\nاللهم إني أسألك العفو والعافية في الدنيا والآخرة 🤲",
+    "🌿 **ذكر عشوائي:**\n\nرضيت بالله رباً، وبالإسلام ديناً، وبمحمد صلى الله عليه وسلم نبياً 🤲",
+    "🌿 **ذكر عشوائي:**\n\nلا حول ولا قوة إلا بالله 🤲",
+    "🌿 **ذكر عشوائي:**\n\nاللهم صل وسلم على نبينا محمد 🤲",
+    "🌿 **ذكر عشوائي:**\n\nأستغفر الله الذي لا إله إلا هو الحي القيوم وأتوب إليه 🤲",
+    "🌿 **ذكر عشوائي:**\n\nلا إله إلا الله وحده لا شريك له، له الملك وله الحمد وهو على كل شيء قدير 🤲",
+    "🌿 **ذكر عشوائي:**\n\nاللهم إني أسألك الهدى والتقى والعفاف والغنى 🤲",
+    "🌿 **ذكر عشوائي:**\n\nربنا آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار 🤲",
 ]
 
 
@@ -34,6 +48,7 @@ class SchedulerService:
     async def start(self):
         self._running = True
         self._tasks.append(asyncio.create_task(self._auto_activity_loop()))
+        self._tasks.append(asyncio.create_task(self._auto_azkar_loop()))
         self._tasks.append(asyncio.create_task(self._check_expired_jobs()))
         logger.info("Scheduler started")
 
@@ -72,6 +87,35 @@ class SchedulerService:
                 await session.commit()
         except Exception as e:
             logger.error(f"Error in broadcast_activity: {e}")
+
+    async def _auto_azkar_loop(self):
+        while self._running:
+            await asyncio.sleep(10800)
+            await self._broadcast_azkar()
+
+    async def _broadcast_azkar(self):
+        if not self._bot:
+            return
+        try:
+            async with async_session_factory() as session:
+                job_repo = ScheduledJobRepository(session)
+                jobs = await job_repo.get_due()
+
+                for job in jobs:
+                    if job.job_type == "activity":
+                        zekr = random.choice(أذكار)
+                        try:
+                            await self._bot.send_message(
+                                job.chat_id,
+                                f"⏰ **ذكر من فنوع:**\n\n{zekr}",
+                                parse_mode="Markdown",
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to send azkar to {job.chat_id}: {e}")
+
+                await session.commit()
+        except Exception as e:
+            logger.error(f"Error in broadcast_azkar: {e}")
 
     async def _check_expired_jobs(self):
         from src.database.repository import InfractionRepository
