@@ -141,15 +141,20 @@ def build_application() -> Application:
     async def message_logger(update, context):
         await handle_message(update, context)
 
-    handlers = [MessageHandler(filters.ALL & ~filters.COMMAND, message_logger, block=False)]
-    handlers.extend(get_welcome_handlers())
-    handlers.extend(get_admin_handlers())
-    handlers.extend(get_game_handlers())
-    handlers.extend(get_ai_handlers())
-    handlers.extend(get_azkar_handlers())
-    handlers.extend(get_misc_handlers())
+    application.add_handler(
+        MessageHandler(filters.ALL & ~filters.COMMAND, message_logger, block=False),
+        group=-1,
+    )
 
-    for handler in handlers:
+    other_handlers = []
+    other_handlers.extend(get_welcome_handlers())
+    other_handlers.extend(get_admin_handlers())
+    other_handlers.extend(get_game_handlers())
+    other_handlers.extend(get_ai_handlers())
+    other_handlers.extend(get_azkar_handlers())
+    other_handlers.extend(get_misc_handlers())
+
+    for handler in other_handlers:
         application.add_handler(handler)
 
     return application
