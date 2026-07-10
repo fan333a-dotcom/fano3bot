@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import re
 
 from telegram import Update, ChatPermissions, ChatMember as TGChatMember
@@ -231,13 +232,37 @@ def build_delete_message_ids(
     return ids[:count]
 
 
+async def get_recent_message_ids_from_chat(bot, chat_id: int, limit: int) -> list[int]:
+    try:
+        history = bot.get_chat_history(chat_id=chat_id, limit=max(10, limit))
+        if inspect.isawaitable(history):
+            history = await history
+
+        if hasattr(history, "__aiter__"):
+            recent_ids: list[int] = []
+            async for message in history:
+                if getattr(message, "message_id", None) is not None:
+                    recent_ids.append(message.message_id)
+            return recent_ids
+
+        if isinstance(history, (list, tuple)):
+            return [getattr(message, "message_id", None) for message in history if getattr(message, "message_id", None) is not None]
+    except Exception as exc:
+        logger.debug(f"Failed to fetch chat history for delete: {exc}")
+
+    return []
+
+
 async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
+        text = (update.message.text or "").strip()
+        if not re.fullmatch(r"مسح(?:\s*\d+)?", text):
+            return
+
         if not await admin_only(update, context):
             return
 
         chat_id = update.effective_chat.id
-        text = (update.message.text or "").strip()
         reply_message_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
 
         requested_count = parse_delete_count(text)
@@ -258,16 +283,12 @@ async def delete_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             ids = build_delete_message_ids(reply_message_id, recent, requested_count)
 
             if not ids and hasattr(context.bot, "get_chat_history"):
-                try:
-                    history = context.bot.get_chat_history(chat_id=chat_id, limit=max(10, requested_count))
-                    recent_from_history: list[int] = []
-                    async for msg in history:
-                        if msg.message_id not in recent_from_history:
-                            recent_from_history.append(msg.message_id)
-
-                    ids = build_delete_message_ids(reply_message_id, recent_from_history, requested_count)
-                except Exception as exc:
-                    logger.debug(f"Failed to fetch chat history for delete: {exc}")
+                recent_from_history = await get_recent_message_ids_from_chat(
+                    context.bot,
+                    chat_id,
+                    max(10, requested_count),
+                )
+                ids = build_delete_message_ids(reply_message_id, recent_from_history, requested_count)
 
         ids = list(dict.fromkeys(ids))
         if not ids:
@@ -299,6 +320,5 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Regex(r"^(طرد|كيك)"), kick),
         MessageHandler(filters.Regex(r"^اسكت"), mute),
         MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
-        MessageHandler(filters.Regex(r"^مسح(?:\s*\d+)?$"), delete_messages),
-        MessageHandler(filters.Text(["مسح"]), delete_messages),
+        MessageHandler(filters.TEXT, delete_messages),
     ]
