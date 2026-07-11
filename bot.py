@@ -22,6 +22,8 @@ bot = telebot.TeleBot(TOKEN)
 user_points = {}
 # أدمنية البوت (رفع ادمن/تنزيل ادمن) — {chat_id: set(user_ids)}
 promoted_admins: dict[int, set[int]] = {}
+muted_users: dict[int, set[int]] = {}
+banned_users: dict[int, set[int]] = {}
 
 # قائمة الفلترة والحماية (الكلمات الممنوعة)
 bad_words = [
@@ -421,6 +423,7 @@ def main_handler(message):
             return
         try:
             bot.kick_chat_member(message.chat.id, target.id)
+            banned_users.setdefault(message.chat.id, set()).add(target.id)
             bot.reply_to(message, f"✅ تم حظر {target.first_name} من المجموعة.")
         except Exception as e:
             bot.reply_to(message, f"⚠️ ما قدرت أحظر العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
@@ -449,6 +452,7 @@ def main_handler(message):
         try:
             permissions = ChatPermissions(can_send_messages=False)
             bot.restrict_chat_member(message.chat.id, target.id, permissions=permissions, until_date=None)
+            muted_users.setdefault(message.chat.id, set()).add(target.id)
             bot.reply_to(message, f"✅ تم كتم {target.first_name} مؤقتاً.")
         except Exception as e:
             bot.reply_to(message, f"⚠️ ما قدرت أكتم العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
@@ -465,6 +469,7 @@ def main_handler(message):
                                           can_send_other_messages=True, can_add_web_page_previews=True, can_change_info=False,
                                           can_invite_users=True, can_pin_messages=False)
             bot.restrict_chat_member(message.chat.id, target.id, permissions=permissions)
+            muted_users.get(message.chat.id, set()).discard(target.id)
             bot.reply_to(message, f"✅ تم رفع الكتم عن {target.first_name}.")
         except Exception as e:
             bot.reply_to(message, f"⚠️ ما قدرت أفك الكتم، تأكد أني مشرف وعندي صلاحيات. \n{e}")
@@ -515,6 +520,54 @@ def main_handler(message):
             bot.reply_to(message, "📌 تم تثبيت الرسالة.")
         except:
             bot.reply_to(message, "⚠️ ما قدرت أثبت، تأكد إني مشرف وعندي صلاحية التثبيت.")
+
+    elif text == "الغاء تثبيت":
+        if not admin_only(message):
+            return
+        try:
+            bot.unpin_chat_message(message.chat.id)
+            bot.reply_to(message, "📌 تم إلغاء تثبيت الرسالة.")
+        except:
+            bot.reply_to(message, "⚠️ ما قدرت ألغي التثبيت.")
+
+    elif text == "مسح المكتومين":
+        if not admin_only(message):
+            return
+        cid = message.chat.id
+        ids = list(muted_users.get(cid, set()))
+        if not ids:
+            bot.reply_to(message, "ما في مكتومين.")
+            return
+        perms = ChatPermissions(can_send_messages=True, can_send_media_messages=True,
+                                can_send_polls=True, can_send_other_messages=True,
+                                can_add_web_page_previews=True, can_invite_users=True)
+        done = 0
+        for uid in ids:
+            try:
+                bot.restrict_chat_member(cid, uid, permissions=perms)
+                done += 1
+            except:
+                pass
+        muted_users[cid].clear()
+        bot.reply_to(message, f"✅ تم مسح الكتم عن {done} عضو.")
+
+    elif text == "مسح المحظورين":
+        if not admin_only(message):
+            return
+        cid = message.chat.id
+        ids = list(banned_users.get(cid, set()))
+        if not ids:
+            bot.reply_to(message, "ما في محظورين.")
+            return
+        done = 0
+        for uid in ids:
+            try:
+                bot.unban_chat_member(cid, uid)
+                done += 1
+            except:
+                pass
+        banned_users[cid].clear()
+        bot.reply_to(message, f"✅ تم رفع الحظر عن {done} عضو.")
 
     # ================= قائمة الردود التلقائية الفكاهية واليومية =================
     elif "طفش" in text or "ملل" in text:
