@@ -1,8 +1,13 @@
 import os
+import asyncio
 import telebot
 import random
 import requests
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, ChatPermissions
+
+from src.database.engine import async_session_factory
+from src.database.repository import ChatMemberRepository
+from src.database.models import UserRole
 
 for line in open(".env"):
     line = line.strip()
@@ -303,6 +308,38 @@ def main_handler(message):
             bot.reply_to(message, f"🔗 رابط الجروب:\n{link}")
         except:
             bot.reply_to(message, "ما قدرت أجيب الرابط، تأكد إني مشرف.")
+        return
+
+    if text == "@all":
+        if not admin_only(message):
+            return
+        cid = message.chat.id
+        async def get_ids():
+            async with async_session_factory() as session:
+                repo = ChatMemberRepository(session)
+                return await repo.get_all_member_ids(cid, exclude_roles=[UserRole.BLACKLISTED])
+        user_ids = asyncio.run(get_ids())
+        mentions = []
+        for uid in user_ids:
+            try:
+                m = bot.get_chat_member(cid, uid)
+                u = m.user
+                mentions.append(f'<a href="tg://user?id={u.id}">{u.first_name}</a>')
+            except:
+                pass
+        if not mentions:
+            bot.reply_to(message, "ما في أعضاء للتاق.")
+            return
+        chunks, cur = [], ""
+        for m in mentions:
+            cand = f"{cur} {m}" if cur else m
+            if len(cand) > 3900:
+                chunks.append(cur); cur = m
+            else:
+                cur = cand
+        if cur: chunks.append(cur)
+        for c in chunks:
+            bot.reply_to(message, c, parse_mode="HTML")
         return
 
     if text == "الألعاب" or text == "الاوامر" or text == "الالعاب" or text == "قائمة الألعاب":
