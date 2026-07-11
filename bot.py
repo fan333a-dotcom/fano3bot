@@ -297,6 +297,14 @@ def main_handler(message):
 
     # ================= قـائـمـة الأوامـر والـألـعـاب العـربـيـة =================
 
+    if text == "الرابط":
+        try:
+            link = bot.export_chat_invite_link(message.chat.id)
+            bot.reply_to(message, f"🔗 رابط الجروب:\n{link}")
+        except:
+            bot.reply_to(message, "ما قدرت أجيب الرابط، تأكد إني مشرف.")
+        return
+
     if text == "الألعاب" or text == "الاوامر" or text == "الالعاب" or text == "قائمة الألعاب":
         menu = (
             "🎮 **قائمة ألعاب وفعاليات فنوع العملاقة:**\n"
