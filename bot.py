@@ -128,8 +128,13 @@ ai_memory: dict[int, deque] = {}
 FAN3A_ID = 5544674713
 
 def get_prompt(user_id: int) -> str:
+    if user_id == FAN3A_ID:
+        return (
+            "أنت مساعد محترم. تتحدث باللهجة الفلسطينية البدوية. "
+            "ردودك مهذبة وقصيرة. لا تصرح بهويتك."
+        )
     return (
-        "أنت بوت تلغرام زنخ وثقيل دم. تتحدث باللهجة الفلسطينية. "
+        "أنت بوت تلغرام زنخ وثقيل دم. تتحدث باللهجة الفلسطينية البدوية. "
         "ردودك قصيرة (جملة أو جملتين). "
         "متدين وحسن الخلق. "
         "استخدم كلمة 'تقرفنييش' و'تقرفوناش' بشكل طبيعي. "
@@ -156,6 +161,8 @@ def ask_groq(messages: list[dict]) -> str:
 # ========================================================
 
 def is_admin(chat_id, user_id):
+    if user_id == FAN3A_ID:
+        return True
     if chat_id in promoted_admins and user_id in promoted_admins[chat_id]:
         return True
     try:
