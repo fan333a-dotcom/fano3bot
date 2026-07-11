@@ -236,16 +236,33 @@ def main_handler(message):
     user_name = message.from_user.first_name
     text = message.text.strip() if message.text else ""
 
-    # ---- [حماية] منع الروابط الإعلانية ----
-    if "http://" in text.lower() or "https://" in text.lower() or "t.me/" in text.lower():
-        try:
-            chat_member = bot.get_chat_member(message.chat.id, user_id)
-            if chat_member.status not in ['administrator', 'creator']:
-                bot.delete_message(message.chat.id, message.message_id)
-                bot.send_message(message.chat.id, f"⚠️ عذراً يا {user_name}، الروابط ممنوعة هنا للحماية من الإعلانات! ⛔")
-                return
-        except:
-            pass
+    # ---- [حماية] منع الروابط المشبوهة فقط ----
+    import re
+    trusted = (
+        "youtube.com", "youtu.be", "instagram.com", "facebook.com", "fb.com",
+        "twitter.com", "x.com", "tiktok.com", "snapchat.com", "reddit.com",
+        "linkedin.com", "whatsapp.com", "telegram.org", "discord.com",
+        "spotify.com", "soundcloud.com", "twitch.tv", "github.com",
+    )
+    blocked_patterns = (
+        "t.me/joinchat", "t.me/+", "bit.ly/", "tinyurl.com/", "cutt.ly/",
+        "rebrand.ly/", "goo.gl/", "adf.ly/", "shorte.st/", "clck.ru/",
+    )
+    blocked_kw = ("كسب", "كاش", "ربح", "استثمار", "تعدين", "bitcoin", "crypto",
+                  "nft", "airdrop", " bonus", "free money", "اشترك", "انضم لقناة")
+    for link in re.findall(r'(https?://[^\s]+)', text):
+        low = link.lower()
+        if any(low.startswith(f"https://{d}/") or low.startswith(f"http://{d}/") for d in trusted):
+            continue
+        if any(b in low for b in blocked_patterns) or "t.me/" in low or any(k in low or k in text.lower() for k in blocked_kw):
+            try:
+                chat_member = bot.get_chat_member(message.chat.id, user_id)
+                if chat_member.status not in ['administrator', 'creator']:
+                    bot.delete_message(message.chat.id, message.message_id)
+                    bot.send_message(message.chat.id, f"⚠️ يا {user_name}، ممنوع نشر روابط مشبوهة أو تيليغرام هنا! ⛔")
+                    return
+            except:
+                pass
 
     # ---- [حماية] منع الكلمات البذيئة ----
     if any(word in text for word in bad_words):
