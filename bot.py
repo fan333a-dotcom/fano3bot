@@ -241,6 +241,8 @@ def on_bot_join(message):
 # ========================================================
 @bot.message_handler(func=lambda message: True)
 def main_handler(message):
+    if message.chat.type == "private":
+        return
     user_id = message.from_user.id
     user_name = message.from_user.first_name
     text = message.text.strip() if message.text else ""
