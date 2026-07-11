@@ -173,7 +173,7 @@ async def mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await get_target_user(update)
     if not target:
-        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر اسكت.")
+        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر كتم.")
         return
 
     target_id, target_name = target
@@ -208,7 +208,7 @@ async def unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await get_target_user(update)
     if not target:
-        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر فك اسكت.")
+        await update.message.reply_text("❌ الرجاء الرد على رسالة العضو أو استخدم @username بعد أمر فك كتم.")
         return
 
     target_id, target_name = target
@@ -239,8 +239,8 @@ async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "🛡️ **أوامر الأدمن في فنوع:**\n"
         "- ارفض (رد على رسالة) -> بحظر مؤقتاً أو ببند حسب الحاجة\n"
         "- كيك (رد على رسالة) -> بطرد العضو من الجروب\n"
-        "- اسكت (رد على رسالة) -> بكتم العضو 60 ثانية\n"
-        "- فك اسكت (رد على رسالة) -> بفك الكتم عن العضو\n"
+        "- كتم (رد على رسالة) -> بكتم العضو 60 ثانية\n"
+        "- فك كتم (رد على رسالة) -> بفك الكتم عن العضو\n"
         "- حظر (رد على رسالة أو @username) -> بمنع العضو من الجروب\n"
         "- مسح (رد على رسالة) -> يمسح الرسالة المقصودة\n"
         "- مسح 10 -> يمسح آخر 10 رسائل بالجروب (بدون رد)\n"
@@ -345,8 +345,8 @@ def get_admin_handlers() -> list:
         MessageHandler(filters.Text(["قائمة الأدمن"]), admin_menu),
         MessageHandler(filters.Regex(r"^حظر"), ban),
         MessageHandler(filters.Regex(r"^(طرد|كيك)"), kick),
-        MessageHandler(filters.Regex(r"^اسكت"), mute),
-        MessageHandler(filters.Regex(r"^فك اسكت"), unmute),
+        MessageHandler(filters.Regex(r"^كتم"), mute),
+        MessageHandler(filters.Regex(r"^فك كتم"), unmute),
         MessageHandler(filters.Regex(r"^مسح"), delete_messages),
         MessageHandler(filters.Regex(r"^تاق"), tag_all),
         MessageHandler(filters.Regex(r"^رفع ادمن"), promote_admin),
