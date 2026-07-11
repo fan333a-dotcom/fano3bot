@@ -504,6 +504,18 @@ def main_handler(message):
             promoted_admins[cid].discard(target.id)
         bot.reply_to(message, f"✅ تم تنزيل {target.first_name} من أدمن البوت.")
 
+    elif text == "تثبيت":
+        if not admin_only(message):
+            return
+        if not message.reply_to_message:
+            bot.reply_to(message, "❌ رد على الرسالة اللي بدك تثبتها.")
+            return
+        try:
+            bot.pin_chat_message(message.chat.id, message.reply_to_message.message_id)
+            bot.reply_to(message, "📌 تم تثبيت الرسالة.")
+        except:
+            bot.reply_to(message, "⚠️ ما قدرت أثبت، تأكد إني مشرف وعندي صلاحية التثبيت.")
+
     # ================= قائمة الردود التلقائية الفكاهية واليومية =================
     elif "طفش" in text or "ملل" in text:
         bot.reply_to(message, "افا! الطفش ممنوع بوجود فنوع 🥳 اكتب كلمة 'الألعاب' وخلنا نفلها ونطرد الملل!")
