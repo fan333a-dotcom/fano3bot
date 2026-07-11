@@ -121,6 +121,7 @@ bad_words = [
 
 # ---- Groq (LLaMA) الذكاء الاصطناعي ----
 from collections import deque
+from urllib.parse import quote
 
 ai_memory: dict[int, deque] = {}
 
@@ -373,6 +374,8 @@ def main_handler(message):
             "`لو خيروك` `كت تويت` `نكتة`\n"
             "`فعالية` `صراحة` `مثل`\n"
             "`نسبة الحب` `معلوماتي`\n\n"
+            "🎨 **توليد صور:**\n"
+            "`ارسم ...` أو `صور ...`\n\n"
             "💬 **شات AI:**\n"
             "`يا فنوع ...` — كلمني بالعامية\n"
             "(أو رد على رسالتي واكتب أي شيء)\n\n"
@@ -618,6 +621,17 @@ def main_handler(message):
 
     elif text == "الحمد لله" or text == "الحمدلله":
         bot.reply_to(message, "الحمد لله دائماً وأبداً على كل حال 🤲 ربي يديم عليك النعمة والراحة.")
+
+    # ================= توليد الصور =================
+    elif text.startswith("ارسم ") or text.startswith("صور "):
+        prompt = text.replace("ارسم ", "").replace("صور ", "").strip()
+        if prompt:
+            bot.send_chat_action(message.chat.id, 'upload_photo')
+            try:
+                url = f"https://image.pollinations.ai/prompt/{quote(prompt)}"
+                bot.send_photo(message.chat.id, url, caption=f"🎨 {prompt}")
+            except:
+                bot.reply_to(message, "ما قدرت أ generate الصورة، حاول مرة تانية.")
 
     # ================= شات الذكاء الاصطناعي (يا فنوع + السؤال) =================
     elif text.startswith("يا فنوع ") or text.startswith("فنوع "):
