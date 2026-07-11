@@ -373,7 +373,7 @@ def main_handler(message):
             "`يا فنوع ...` — كلمني بالعامية\n"
             "(أو رد على رسالتي واكتب أي شيء)\n\n"
             "🛡️ **مشرفين:**\n"
-            "`حظر` `طرد/كيك` `اسكت` `فك اسكت`\n"
+            "`حظر` `طرد/كيك` `كتم` `فك كتم`\n"
             "`تثبيت` `الغاء تثبيت` `@all`\n"
             "`مسح المكتومين` `مسح المحظورين`\n"
             "`تاق` — منشن كل الأعضاء\n"
@@ -426,8 +426,8 @@ def main_handler(message):
             "🛡️ **أوامر الأدمن في فنوع:**\n"
             "- ارفض (رد على رسالة) -> يحظر مؤقتاً أو يبند حسب الحاجة\n"
             "- كيك (رد على رسالة) -> يطرد العضو من الجروب\n"
-            "- اسكت (رد على رسالة) -> يكتم العضو 60 ثانية\n"
-            "- فك اسكت (رد على رسالة) -> يفك الكتم عن العضو\n"
+            "- كتم (رد على رسالة) -> يكتم العضو 60 ثانية\n"
+            "- فك كتم (رد على رسالة) -> يفك الكتم عن العضو\n"
             "- حظر (رد على رسالة أو @username) -> يمنع العضو من الجروب\n"
             "- رفع صوتي -> يرفع صوت البوت ويشير إنه شغال\n"
             "- تنزيل صوتي -> يوقف صوت البوت ويشير إنه هادي\n"
@@ -462,12 +462,12 @@ def main_handler(message):
         except Exception as e:
             bot.reply_to(message, f"⚠️ ما قدرت أطرد العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
 
-    elif text.startswith("اسكت"):
+    elif text.startswith("كتم"):
         if not admin_only(message):
             return
         target = get_target_user(message)
         if not target:
-            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر اسكت.")
+            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر كتم.")
             return
         try:
             permissions = ChatPermissions(can_send_messages=False)
@@ -477,12 +477,12 @@ def main_handler(message):
         except Exception as e:
             bot.reply_to(message, f"⚠️ ما قدرت أكتم العضو، تأكد أني مشرف وعندي صلاحيات. \n{e}")
 
-    elif text.startswith("فك اسكت"):
+    elif text.startswith("فك كتم"):
         if not admin_only(message):
             return
         target = get_target_user(message)
         if not target:
-            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر فك اسكت.")
+            bot.reply_to(message, "❌ رجاءً رد على رسالة العضو أو استخدم @username بعد أمر فك كتم.")
             return
         try:
             permissions = ChatPermissions(can_send_messages=True, can_send_media_messages=True, can_send_polls=True,
